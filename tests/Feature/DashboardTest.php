@@ -160,6 +160,78 @@ class DashboardTest extends TestCase
             ->assertSee('old.example');
     }
 
+    public function test_dashboard_can_filter_by_custom_date_range(): void
+    {
+        $user = User::factory()->create();
+
+        $account = ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $recentReport = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'recent-report',
+            'org_name' => 'Recent Sender',
+            'email' => 'recent@example.com',
+            'report_begin_at' => now()->subDays(2),
+            'report_end_at' => now()->subDay(),
+            'policy_domain' => 'recent.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        $oldReport = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'old-report',
+            'org_name' => 'Old Sender',
+            'email' => 'old@example.com',
+            'report_begin_at' => now()->subDays(15),
+            'report_end_at' => now()->subDays(14),
+            'policy_domain' => 'old.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $recentReport->id,
+            'source_ip' => '203.0.113.11',
+            'message_count' => 12,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'recent.example',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $oldReport->id,
+            'source_ip' => '203.0.113.99',
+            'message_count' => 20,
+            'disposition' => 'reject',
+            'dkim' => 'fail',
+            'spf' => 'fail',
+            'header_from' => 'old.example',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard', [
+                'range' => 'custom',
+                'from' => now()->subDays(3)->format('Y-m-d'),
+                'to' => now()->format('Y-m-d'),
+            ]))
+            ->assertOk()
+            ->assertSee('Recent Sender')
+            ->assertSee('recent.example')
+            ->assertDontSee('Old Sender')
+            ->assertDontSee('old.example');
+    }
+
     public function test_user_can_view_their_original_report_but_not_someone_elses(): void
     {
         $user = User::factory()->create();

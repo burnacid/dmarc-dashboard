@@ -52,6 +52,7 @@
 
                 <div class="flex flex-wrap gap-2">
                     @foreach ($rangeOptions as $value => $label)
+                        @continue($value === 'custom')
                         <a
                             href="{{ route('dashboard', ['range' => $value, 'focus' => $focus]) }}"
                             class="rounded-2xl px-3 py-2 text-sm font-medium transition {{ $range['value'] === $value ? 'bg-sky-400 text-slate-950' : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' }}"
@@ -61,6 +62,31 @@
                     @endforeach
                 </div>
             </div>
+
+            <form method="GET" action="{{ route('dashboard') }}" class="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[auto,1fr,1fr,auto,auto] md:items-end">
+                <input type="hidden" name="focus" value="{{ $focus }}">
+                <input type="hidden" name="range" value="custom">
+
+                <p class="text-sm font-medium text-slate-200">Custom range</p>
+
+                <div>
+                    <label for="from" class="text-xs uppercase tracking-[0.18em] text-slate-500">From</label>
+                    <input id="from" name="from" type="date" value="{{ $range['from_input'] }}" class="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
+                </div>
+
+                <div>
+                    <label for="to" class="text-xs uppercase tracking-[0.18em] text-slate-500">To</label>
+                    <input id="to" name="to" type="date" value="{{ $range['to_input'] }}" class="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
+                </div>
+
+                <button type="submit" class="rounded-2xl bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-300">
+                    Apply
+                </button>
+
+                <a href="{{ route('dashboard', ['range' => '30d', 'focus' => $focus]) }}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-100 transition hover:bg-white/10">
+                    Reset
+                </a>
+            </form>
 
             @php
                 $trendMax = max(1, (int) ($timeSeries->max('total_messages') ?? 1));
@@ -195,7 +221,7 @@
                     <div class="flex flex-wrap gap-2">
                         @foreach ($focusOptions as $value => $label)
                             <a
-                                href="{{ route('dashboard', ['range' => $range['value'], 'focus' => $value]) }}"
+                                href="{{ route('dashboard', array_merge($rangeQuery, ['focus' => $value])) }}"
                                 class="rounded-2xl px-3 py-2 text-sm font-medium transition {{ $focus === $value ? 'bg-rose-400 text-white' : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' }}"
                             >
                                 {{ $label }}
@@ -270,7 +296,7 @@
                             <h2 class="text-lg font-semibold text-white">Recent DMARC reports</h2>
                             <p class="mt-1 text-sm text-slate-400">Latest parsed reports inside the selected timeframe.</p>
                         </div>
-                        <a href="{{ route('reports.index') }}" class="text-sm font-medium text-sky-300 hover:text-sky-200">Browse all reports</a>
+                        <a href="{{ route('reports.index', $rangeQuery) }}" class="text-sm font-medium text-sky-300 hover:text-sky-200">Browse all reports</a>
                     </div>
 
                     <div class="mt-5 space-y-3">

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -12,11 +13,20 @@ class DmarcReportController extends Controller
     public function index(Request $request): View
     {
         $user = $request->user();
+        $range = $this->resolveRange(
+            $request->string('range')->toString(),
+            trim((string) $request->input('from', '')),
+            trim((string) $request->input('to', '')),
+        );
+
         $filters = [
             'account_id' => $request->integer('account_id') ?: null,
             'domain' => trim((string) $request->input('domain', '')),
             'org' => trim((string) $request->input('org', '')),
             'report_id' => trim((string) $request->input('report_id', '')),
+            'range' => $range['value'],
+            'from' => $range['from_input'],
+            'to' => $range['to_input'],
             'per_page' => in_array($request->integer('per_page'), [10, 25, 50, 100], true)
                 ? $request->integer('per_page')
                 : 25,
@@ -37,6 +47,10 @@ class DmarcReportController extends Controller
             ->when($filters['domain'] !== '', fn ($query) => $query->where('policy_domain', 'like', '%'.$filters['domain'].'%'))
             ->when($filters['org'] !== '', fn ($query) => $query->where('org_name', 'like', '%'.$filters['org'].'%'))
             ->when($filters['report_id'] !== '', fn ($query) => $query->where('external_report_id', 'like', '%'.$filters['report_id'].'%'))
+            ->when(
+                $range['start'] !== null && $range['end'] !== null,
+                fn ($query) => $query->whereRaw('COALESCE(report_end_at, created_at) BETWEEN ? AND ?', [$range['start'], $range['end']])
+            )
             ->orderByRaw('COALESCE(report_end_at, created_at) desc')
             ->orderByDesc('id')
             ->paginate($filters['per_page'])
@@ -63,6 +77,7 @@ class DmarcReportController extends Controller
             'reports' => $reports,
             'accounts' => $accounts,
             'filters' => $filters,
+            'rangeOptions' => $this->rangeOptions(),
         ]);
     }
 
@@ -82,6 +97,86 @@ class DmarcReportController extends Controller
     {
 
         return trim($xml);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function rangeOptions(): array
+    {
+        return [
+            'all' => 'All time',
+            '7d' => '7 days',
+            '30d' => '30 days',
+            '90d' => '90 days',
+            '180d' => '6 months',
+            '365d' => '12 months',
+            'custom' => 'Custom',
+        ];
+    }
+
+    /**
+     * @return array{value:string,start:Carbon|null,end:Carbon|null,from_input:string,to_input:string}
+     */
+    private function resolveRange(string $range, string $fromInput, string $toInput): array
+    {
+        if ($fromInput !== '' || $toInput !== '' || $range === 'custom') {
+            $start = $this->parseDateInput($fromInput)?->startOfDay();
+            $end = $this->parseDateInput($toInput)?->endOfDay();
+
+            if ($start !== null && $end !== null && $start->lte($end)) {
+                return [
+                    'value' => 'custom',
+                    'start' => $start,
+                    'end' => $end,
+                    'from_input' => $fromInput,
+                    'to_input' => $toInput,
+                ];
+            }
+        }
+
+        if ($range === 'all' || $range === '') {
+            return [
+                'value' => 'all',
+                'start' => null,
+                'end' => null,
+                'from_input' => '',
+                'to_input' => '',
+            ];
+        }
+
+        if (array_key_exists($range, $this->rangeOptions()) && str_ends_with($range, 'd')) {
+            $days = (int) rtrim($range, 'd');
+
+            return [
+                'value' => $range,
+                'start' => now()->subDays($days - 1)->startOfDay(),
+                'end' => now()->endOfDay(),
+                'from_input' => '',
+                'to_input' => '',
+            ];
+        }
+
+        return [
+            'value' => 'all',
+            'start' => null,
+            'end' => null,
+            'from_input' => '',
+            'to_input' => '',
+        ];
+    }
+
+    private function parseDateInput(string $value): ?Carbon
+    {
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('Y-m-d', $value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
 

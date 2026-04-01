@@ -18,7 +18,8 @@ class DashboardController extends Controller
     public function index(Request $request): View
     {
         $user = $request->user();
-        $range = $this->resolveRange($request->string('range')->toString());
+        $range = $this->resolveRange($request);
+        $rangeQuery = $this->rangeQuery($range);
         $focus = $this->resolveFocus($request->string('focus')->toString());
 
         $accounts = $user->imapAccounts()
@@ -125,6 +126,7 @@ class DashboardController extends Controller
             'resultSummary' => $resultSummary,
             'timeSeries' => $timeSeries,
             'range' => $range,
+            'rangeQuery' => $rangeQuery,
             'rangeOptions' => $this->rangeOptions(),
             'focus' => $focus,
             'focusOptions' => $this->focusOptions(),
@@ -212,6 +214,7 @@ class DashboardController extends Controller
             '90d' => '90 days',
             '180d' => '6 months',
             '365d' => '12 months',
+            'custom' => 'Custom',
         ];
     }
 
@@ -226,9 +229,34 @@ class DashboardController extends Controller
         ];
     }
 
-    private function resolveRange(string $range): array
+    private function resolveRange(Request $request): array
     {
+        $fromInput = trim((string) $request->input('from', ''));
+        $toInput = trim((string) $request->input('to', ''));
+
+        if ($fromInput !== '' || $toInput !== '' || $request->string('range')->toString() === 'custom') {
+            $start = $this->parseDateInput($fromInput)?->startOfDay();
+            $end = $this->parseDateInput($toInput)?->endOfDay();
+
+            if ($start !== null && $end !== null && $start->lte($end)) {
+                return [
+                    'value' => 'custom',
+                    'label' => 'custom range',
+                    'start' => $start,
+                    'end' => $end,
+                    'days' => $start->diffInDays($end) + 1,
+                    'from_input' => $fromInput,
+                    'to_input' => $toInput,
+                    'is_custom' => true,
+                ];
+            }
+        }
+
+        $range = $request->string('range')->toString();
         $range = array_key_exists($range, $this->rangeOptions()) ? $range : '30d';
+        if ($range === 'custom') {
+            $range = '30d';
+        }
         $days = (int) rtrim($range, 'd');
         $end = now()->endOfDay();
         $start = now()->subDays($days - 1)->startOfDay();
@@ -239,7 +267,41 @@ class DashboardController extends Controller
             'start' => $start,
             'end' => $end,
             'days' => $days,
+            'from_input' => '',
+            'to_input' => '',
+            'is_custom' => false,
         ];
+    }
+
+    /**
+     * @return array{range:string,from?:string,to?:string}
+     */
+    private function rangeQuery(array $range): array
+    {
+        if (($range['value'] ?? '') === 'custom' && ($range['from_input'] ?? '') !== '' && ($range['to_input'] ?? '') !== '') {
+            return [
+                'range' => 'custom',
+                'from' => (string) $range['from_input'],
+                'to' => (string) $range['to_input'],
+            ];
+        }
+
+        return [
+            'range' => (string) ($range['value'] ?? '30d'),
+        ];
+    }
+
+    private function parseDateInput(string $value): ?Carbon
+    {
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('Y-m-d', $value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function resolveFocus(string $focus): string

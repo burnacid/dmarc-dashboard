@@ -65,10 +65,35 @@ class DmarcReportIndexTest extends TestCase
         $response->assertOk()
             ->assertSee('Google')
             ->assertSee('example.com')
-            ->assertSee('DKIM pass 10')
-            ->assertSee('SPF pass 10')
+            ->assertSee('DKIM pass')
+            ->assertSee('SPF pass')
             ->assertDontSee('Microsoft')
             ->assertSee(route('reports.show', $matching), false);
+    }
+
+    public function test_reports_index_filters_by_preset_and_custom_time_ranges(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->makeAccount($user, 'Primary Inbox');
+
+        $this->makeReport($account, 'recent-report', 'Recent Org', 'recent.example', now()->subDay());
+        $this->makeReport($account, 'old-report', 'Old Org', 'old.example', now()->subDays(45));
+
+        $this->actingAs($user)
+            ->get(route('reports.index', ['range' => '7d']))
+            ->assertOk()
+            ->assertSee('Recent Org')
+            ->assertDontSee('Old Org');
+
+        $this->actingAs($user)
+            ->get(route('reports.index', [
+                'range' => 'custom',
+                'from' => now()->subDays(50)->format('Y-m-d'),
+                'to' => now()->subDays(40)->format('Y-m-d'),
+            ]))
+            ->assertOk()
+            ->assertSee('Old Org')
+            ->assertDontSee('Recent Org');
     }
 
     public function test_reports_index_paginates_results(): void

@@ -15,7 +15,7 @@
 
     <div class="flex flex-col gap-6">
         <section class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
-            <form method="GET" action="{{ route('reports.index') }}" class="grid gap-4 lg:grid-cols-5">
+            <form method="GET" action="{{ route('reports.index') }}" class="grid gap-4 lg:grid-cols-8">
                 <div class="space-y-2">
                     <label for="account_id" class="text-sm font-medium text-slate-200">Account</label>
                     <select id="account_id" name="account_id" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
@@ -42,6 +42,25 @@
                 </div>
 
                 <div class="space-y-2">
+                    <label for="range" class="text-sm font-medium text-slate-200">Time range</label>
+                    <select id="range" name="range" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
+                        @foreach ($rangeOptions as $rangeValue => $rangeLabel)
+                            <option value="{{ $rangeValue }}" @selected($filters['range'] === $rangeValue)>{{ $rangeLabel }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="space-y-2">
+                    <label for="from" class="text-sm font-medium text-slate-200">From</label>
+                    <input id="from" name="from" type="date" value="{{ $filters['from'] }}" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
+                </div>
+
+                <div class="space-y-2">
+                    <label for="to" class="text-sm font-medium text-slate-200">To</label>
+                    <input id="to" name="to" type="date" value="{{ $filters['to'] }}" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
+                </div>
+
+                <div class="space-y-2">
                     <label for="per_page" class="text-sm font-medium text-slate-200">Per page</label>
                     <select id="per_page" name="per_page" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
                         @foreach ([10, 25, 50, 100] as $perPage)
@@ -50,7 +69,7 @@
                     </select>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-3 lg:col-span-5">
+                <div class="flex flex-wrap items-center gap-3 lg:col-span-8">
                     <button type="submit" class="rounded-2xl bg-sky-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-300">
                         Apply filters
                     </button>

@@ -9,6 +9,6 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('dmarc:poll')
-    ->everyFiveMinutes()
+    ->everyMinute()
     ->withoutOverlapping();
 

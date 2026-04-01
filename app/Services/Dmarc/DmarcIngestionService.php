@@ -11,7 +11,7 @@ use Webklex\PHPIMAP\Exceptions\ResponseException;
 
 class DmarcIngestionService
 {
-    private const CHUNK_SIZE = 25;
+    private const CHUNK_SIZE = 50;
 
     public function __construct(
         private readonly DmarcAttachmentExtractor $attachmentExtractor,
@@ -53,7 +53,8 @@ class DmarcIngestionService
 
             try {
                 $query->chunked(function ($messages) use ($account, &$stats): void {
-                    foreach ($messages as $message) {
+                    // Process messages in reverse order (newest first)
+                    foreach ($messages->reverse() as $message) {
                         $stats['processed_messages']++;
 
                         try {
