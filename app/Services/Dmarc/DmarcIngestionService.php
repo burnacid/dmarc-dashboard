@@ -172,6 +172,7 @@ class DmarcIngestionService
                 'message_id' => $this->messageId($message),
                 'subject' => $this->messageSubject($message),
                 'attachments' => $attachmentMeta,
+                'content_signatures' => array_map(fn ($a) => bin2hex(substr($a['content'], 0, 4)), $attachments),
             ]);
 
             return 0;
@@ -242,6 +243,18 @@ class DmarcIngestionService
 
     private function attachmentContent(mixed $attachment): string
     {
+        // Try the __call-based magic accessor first (works with Webklex Attachment)
+        if (is_object($attachment)) {
+            try {
+                $content = $attachment->getContent();
+                if (is_string($content) && $content !== '') {
+                    return $content;
+                }
+            } catch (\Throwable) {
+                // fall through to other strategies
+            }
+        }
+
         if (is_object($attachment) && method_exists($attachment, 'getContent')) {
             return (string) $attachment->getContent();
         }

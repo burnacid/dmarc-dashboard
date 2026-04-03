@@ -2,6 +2,7 @@
 
 namespace App\Services\Dmarc;
 
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use ZipArchive;
 
@@ -49,6 +50,15 @@ class DmarcAttachmentExtractor
             if (is_string($decoded) && $decoded !== '') {
                 return $this->extractPayloadCandidates($decoded, $name, 'application/xml', $depth + 1);
             }
+
+            // Fallback: try base64-decoding then gzip
+            $b64decoded = base64_decode($payload, true);
+            if ($b64decoded !== false) {
+                $decoded = @gzdecode($b64decoded);
+                if (is_string($decoded) && $decoded !== '') {
+                    return $this->extractPayloadCandidates($decoded, $name, 'application/xml', $depth + 1);
+                }
+            }
         }
 
         if ($this->isZipLike($payload, $contentType, $name)) {
@@ -56,6 +66,18 @@ class DmarcAttachmentExtractor
 
             foreach ($this->extractFromZip($payload) as $entry) {
                 $payloads = array_merge($payloads, $this->extractPayloadCandidates($entry, $name, 'application/octet-stream', $depth + 1));
+            }
+
+            if ($payloads !== []) {
+                return $payloads;
+            }
+
+            // Fallback: content may still be base64-encoded — try decoding it first
+            $b64decoded = base64_decode($payload, true);
+            if ($b64decoded !== false && str_starts_with($b64decoded, "PK\x03\x04")) {
+                foreach ($this->extractFromZip($b64decoded) as $entry) {
+                    $payloads = array_merge($payloads, $this->extractPayloadCandidates($entry, $name, 'application/octet-stream', $depth + 1));
+                }
             }
 
             return $payloads;
@@ -127,28 +149,39 @@ class DmarcAttachmentExtractor
         $zip = new ZipArchive();
         $xmlPayloads = [];
 
-        if ($zip->open($tmpPath) === true) {
-            for ($i = 0; $i < $zip->numFiles; $i++) {
-                $entryName = strtolower((string) $zip->getNameIndex($i));
-                $entryContent = $zip->getFromIndex($i);
+        $openResult = $zip->open($tmpPath);
 
-                if (! is_string($entryContent) || $entryContent === '') {
-                    continue;
-                }
+        if ($openResult !== true) {
+            @unlink($tmpPath);
 
-                if (str_ends_with($entryName, '.xml')) {
-                    $xmlPayloads[] = $entryContent;
-                } elseif (str_ends_with($entryName, '.gz')) {
-                    $decoded = @gzdecode($entryContent);
-                    if (is_string($decoded) && $decoded !== '') {
-                        $xmlPayloads[] = $decoded;
-                    }
-                }
-            }
+            Log::debug('ZipArchive could not open temp file.', [
+                'error_code' => $openResult,
+                'bytes' => strlen($rawZip),
+                'magic' => bin2hex(substr($rawZip, 0, 4)),
+            ]);
 
-            $zip->close();
+            return [];
         }
 
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entryName = strtolower((string) $zip->getNameIndex($i));
+            $entryContent = $zip->getFromIndex($i);
+
+            if (! is_string($entryContent) || $entryContent === '') {
+                continue;
+            }
+
+            if (str_ends_with($entryName, '.xml')) {
+                $xmlPayloads[] = $entryContent;
+            } elseif (str_ends_with($entryName, '.gz')) {
+                $decoded = @gzdecode($entryContent);
+                if (is_string($decoded) && $decoded !== '') {
+                    $xmlPayloads[] = $decoded;
+                }
+            }
+        }
+
+        $zip->close();
         @unlink($tmpPath);
 
         return $xmlPayloads;
