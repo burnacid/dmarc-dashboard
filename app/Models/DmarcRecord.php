@@ -16,7 +16,9 @@ class DmarcRecord extends Model
         'message_count',
         'disposition',
         'dkim',
+        'dkim_domain',
         'spf',
+        'spf_domain',
         'header_from',
     ];
 

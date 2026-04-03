@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DmarcReportController;
+use App\Http\Controllers\DomainFilterController;
 use App\Http\Controllers\ImapAccountController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SecurityController;
@@ -20,6 +21,8 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::post('/filters/domain', [DomainFilterController::class, 'update'])->name('filters.domain.update');
+
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('/dashboard/poll-now', [DashboardController::class, 'pollNow'])->name('dashboard.poll-now');
     Route::get('/reports', [DmarcReportController::class, 'index'])->name('reports.index');

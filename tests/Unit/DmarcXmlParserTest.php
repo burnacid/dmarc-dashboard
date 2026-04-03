@@ -38,6 +38,16 @@ class DmarcXmlParserTest extends TestCase
     <identifiers>
       <header_from>example.com</header_from>
     </identifiers>
+    <auth_results>
+      <dkim>
+        <domain>mail.example.com</domain>
+        <result>pass</result>
+      </dkim>
+      <spf>
+        <domain>bounce.example.net</domain>
+        <result>pass</result>
+      </spf>
+    </auth_results>
   </record>
 </feedback>
 XML;
@@ -54,6 +64,8 @@ XML;
         $this->assertSame('192.0.2.15', $parsed['records'][0]['source_ip']);
         $this->assertSame(12, $parsed['records'][0]['message_count']);
         $this->assertSame('pass', $parsed['records'][0]['dkim']);
+        $this->assertSame('mail.example.com', $parsed['records'][0]['dkim_domain']);
+        $this->assertSame('bounce.example.net', $parsed['records'][0]['spf_domain']);
     }
 
     public function test_it_falls_back_to_a_hash_when_report_id_is_missing(): void

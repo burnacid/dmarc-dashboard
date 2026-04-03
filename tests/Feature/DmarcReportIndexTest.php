@@ -92,6 +92,26 @@ class DmarcReportIndexTest extends TestCase
             ->assertDontSee('foreign.example');
     }
 
+    public function test_reports_index_uses_persistent_global_domain_filter_from_session(): void
+    {
+        $user = User::factory()->create();
+
+        $account = $this->makeAccount($user, 'Primary Inbox');
+
+        $this->makeReport($account, 'rep-1', 'Alpha Org', 'alpha.example', now()->subDay());
+        $this->makeReport($account, 'rep-2', 'Beta Org', 'beta.example', now()->subHours(12));
+
+        $this->actingAs($user)
+            ->post(route('filters.domain.update'), ['domain' => 'alpha.example'])
+            ->assertRedirect();
+
+        $this->actingAs($user)
+            ->get(route('reports.index'))
+            ->assertOk()
+            ->assertSee('Alpha Org')
+            ->assertDontSee('Beta Org');
+    }
+
     public function test_reports_index_filters_by_preset_and_custom_time_ranges(): void
     {
         $user = User::factory()->create();

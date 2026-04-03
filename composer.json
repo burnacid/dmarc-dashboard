@@ -9,6 +9,7 @@
         "php": "^8.3",
         "ext-dom": "*",
         "ext-libxml": "*",
+        "ext-simplexml": "*",
         "ext-zip": "*",
         "ext-zlib": "*",
         "laragear/two-factor": "4.0",

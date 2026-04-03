@@ -150,8 +150,7 @@ class DashboardTest extends TestCase
             ->assertOk()
             ->assertSee('Current Sender')
             ->assertSee('current.example')
-            ->assertDontSee('Old Sender')
-            ->assertDontSee('old.example');
+            ->assertDontSee('Old Sender');
 
         $this->actingAs($user)
             ->get(route('dashboard', ['range' => '90d']))
@@ -228,8 +227,116 @@ class DashboardTest extends TestCase
             ->assertOk()
             ->assertSee('Recent Sender')
             ->assertSee('recent.example')
-            ->assertDontSee('Old Sender')
-            ->assertDontSee('old.example');
+            ->assertDontSee('Old Sender');
+    }
+
+    public function test_dashboard_can_filter_by_domain_and_shows_user_domain_options_only(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $account = ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $otherAccount = ImapAccount::query()->create([
+            'user_id' => $otherUser->id,
+            'name' => 'Other Inbox',
+            'host' => 'imap.other.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'other@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $alphaReport = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'alpha-report',
+            'org_name' => 'Alpha Sender',
+            'email' => 'alpha@example.com',
+            'report_begin_at' => now()->subDays(2),
+            'report_end_at' => now()->subDay(),
+            'policy_domain' => 'alpha.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        $betaReport = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'beta-report',
+            'org_name' => 'Beta Sender',
+            'email' => 'beta@example.com',
+            'report_begin_at' => now()->subDays(2),
+            'report_end_at' => now()->subDay(),
+            'policy_domain' => 'beta.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        $foreignReport = DmarcReport::query()->create([
+            'imap_account_id' => $otherAccount->id,
+            'external_report_id' => 'foreign-report',
+            'org_name' => 'Foreign Sender',
+            'email' => 'foreign@example.com',
+            'report_begin_at' => now()->subDays(2),
+            'report_end_at' => now()->subDay(),
+            'policy_domain' => 'foreign.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $alphaReport->id,
+            'source_ip' => '203.0.113.10',
+            'message_count' => 10,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'alpha.example',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $betaReport->id,
+            'source_ip' => '203.0.113.11',
+            'message_count' => 12,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'beta.example',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $foreignReport->id,
+            'source_ip' => '203.0.113.99',
+            'message_count' => 25,
+            'disposition' => 'reject',
+            'dkim' => 'fail',
+            'spf' => 'fail',
+            'header_from' => 'foreign.example',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('All domains')
+            ->assertSee('alpha.example')
+            ->assertSee('beta.example')
+            ->assertDontSee('foreign.example');
+
+        $this->actingAs($user)
+            ->get(route('dashboard', ['domain' => 'alpha.example']))
+            ->assertOk()
+            ->assertSee('Alpha Sender')
+            ->assertDontSee('Beta Sender');
     }
 
     public function test_user_can_view_their_original_report_but_not_someone_elses(): void
@@ -294,6 +401,55 @@ class DashboardTest extends TestCase
         $this->actingAs($user)
             ->get(route('reports.show', $otherReport))
             ->assertNotFound();
+    }
+
+    public function test_report_detail_page_shows_parsed_dkim_and_spf_domains_per_record(): void
+    {
+        $user = User::factory()->create();
+
+        $account = ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $report = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'detail-report',
+            'org_name' => 'Detail Sender',
+            'email' => 'detail@example.com',
+            'report_begin_at' => now()->subDays(2),
+            'report_end_at' => now()->subDay(),
+            'policy_domain' => 'example.com',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $report->id,
+            'source_ip' => '203.0.113.44',
+            'message_count' => 8,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'dkim_domain' => 'mail.example.com',
+            'spf' => 'pass',
+            'spf_domain' => 'spf.example.net',
+            'header_from' => 'example.com',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('reports.show', $report))
+            ->assertOk()
+            ->assertSee('DKIM result')
+            ->assertSee('mail.example.com')
+            ->assertSee('SPF result')
+            ->assertSee('spf.example.net');
     }
 }
 

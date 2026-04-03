@@ -28,6 +28,17 @@
         </div>
 
         <div class="hidden items-center gap-3 md:flex">
+            <form method="POST" action="{{ route('filters.domain.update') }}">
+                @csrf
+                <label for="nav_domain" class="sr-only">Domain filter</label>
+                <select id="nav_domain" name="domain" onchange="this.form.submit()" class="w-52 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 [color-scheme:dark] focus:border-sky-400 focus:outline-none focus:ring-0">
+                    <option value="">All domains</option>
+                    @foreach (($globalDomainOptions ?? collect()) as $domain)
+                        <option value="{{ $domain }}" @selected(($globalSelectedDomain ?? '') === $domain)>{{ $domain }}</option>
+                    @endforeach
+                </select>
+            </form>
+
             <div class="text-right">
                 <p class="text-sm font-medium text-white">{{ Auth::user()->name }}</p>
                 <p class="text-xs text-slate-400">{{ Auth::user()->email }}</p>
@@ -57,6 +68,17 @@
                 </div>
 
                 <div class="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <form method="POST" action="{{ route('filters.domain.update') }}" class="mb-4">
+                        @csrf
+                        <label for="nav_domain_mobile" class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Domain filter</label>
+                        <select id="nav_domain_mobile" name="domain" onchange="this.form.submit()" class="mt-2 w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 [color-scheme:dark] focus:border-sky-400 focus:outline-none focus:ring-0">
+                            <option value="">All domains</option>
+                            @foreach (($globalDomainOptions ?? collect()) as $domain)
+                                <option value="{{ $domain }}" @selected(($globalSelectedDomain ?? '') === $domain)>{{ $domain }}</option>
+                            @endforeach
+                        </select>
+                    </form>
+
                     <p class="text-sm font-medium text-white">{{ Auth::user()->name }}</p>
                     <p class="text-xs text-slate-400">{{ Auth::user()->email }}</p>
 

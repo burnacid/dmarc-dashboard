@@ -21,7 +21,7 @@ class DmarcReportController extends Controller
 
         $filters = [
             'account_id' => $request->integer('account_id') ?: null,
-            'domain' => trim((string) $request->input('domain', '')),
+            'domain' => trim((string) $request->input('domain', (string) $request->session()->get('filters.domain', ''))),
             'org' => trim((string) $request->input('org', '')),
             'report_id' => trim((string) $request->input('report_id', '')),
             'range' => $range['value'],
@@ -44,6 +44,12 @@ class DmarcReportController extends Controller
             ->distinct()
             ->orderBy('policy_domain')
             ->pluck('policy_domain');
+
+        if ($filters['domain'] !== '' && ! $domains->contains($filters['domain'])) {
+            $filters['domain'] = '';
+        }
+
+        $request->session()->put('filters.domain', $filters['domain']);
 
         $reports = DmarcReport::query()
             ->with('account:id,name,user_id')
@@ -84,7 +90,6 @@ class DmarcReportController extends Controller
         return view('dmarc-reports.index', [
             'reports' => $reports,
             'accounts' => $accounts,
-            'domains' => $domains,
             'filters' => $filters,
             'rangeOptions' => $this->rangeOptions(),
         ]);

@@ -9,17 +9,7 @@
                 </p>
             </div>
 
-            <div class="flex flex-wrap items-center gap-3">
-                <a href="{{ route('imap-accounts.create') }}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-100 transition hover:bg-white/10">
-                    Add IMAP account
-                </a>
-                <form method="POST" action="{{ route('dashboard.poll-now') }}">
-                    @csrf
-                    <button type="submit" class="rounded-2xl bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-300">
-                        Poll now
-                    </button>
-                </form>
-            </div>
+            <div class="flex flex-wrap items-center justify-end gap-3"></div>
         </div>
     </x-slot>
 
@@ -43,7 +33,7 @@
             </div>
         </section>
 
-        <section class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+        <section x-data="{ showCustomTime: {{ $range['is_custom'] ? 'true' : 'false' }} }" class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                     <h2 class="text-lg font-semibold text-white">Message trend over time</h2>
@@ -54,38 +44,44 @@
                     @foreach ($rangeOptions as $value => $label)
                         @continue($value === 'custom')
                         <a
-                            href="{{ route('dashboard', ['range' => $value, 'focus' => $focus]) }}"
+                            href="{{ route('dashboard', array_filter(['range' => $value, 'focus' => $focus, 'domain' => $selectedDomain])) }}"
                             class="rounded-2xl px-3 py-2 text-sm font-medium transition {{ $range['value'] === $value ? 'bg-sky-400 text-slate-950' : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' }}"
                         >
                             {{ $label }}
                         </a>
                     @endforeach
+
+                    <button
+                        type="button"
+                        x-on:click="showCustomTime = !showCustomTime"
+                        x-bind:aria-expanded="showCustomTime.toString()"
+                        class="rounded-2xl px-3 py-2 text-sm font-medium transition {{ $range['is_custom'] ? 'bg-sky-400 text-slate-950' : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' }}"
+                    >
+                        <span x-text="showCustomTime ? 'Hide custom time' : 'Custom time'"></span>
+                    </button>
                 </div>
             </div>
 
-            <form method="GET" action="{{ route('dashboard') }}" class="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[auto,1fr,1fr,auto,auto] md:items-end">
-                <input type="hidden" name="focus" value="{{ $focus }}">
-                <input type="hidden" name="range" value="custom">
+            <form x-cloak x-show="showCustomTime" x-transition method="GET" action="{{ route('dashboard') }}" class="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr,1fr,auto] md:items-end">
+                    <input type="hidden" name="focus" value="{{ $focus }}">
+                    <input type="hidden" name="range" value="custom">
+                    @if ($selectedDomain !== '')
+                        <input type="hidden" name="domain" value="{{ $selectedDomain }}">
+                    @endif
 
-                <p class="text-sm font-medium text-slate-200">Custom range</p>
+                    <div>
+                        <label for="from" class="text-xs uppercase tracking-[0.18em] text-slate-500">From</label>
+                        <input id="from" name="from" type="date" value="{{ $range['from_input'] }}" class="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
+                    </div>
 
-                <div>
-                    <label for="from" class="text-xs uppercase tracking-[0.18em] text-slate-500">From</label>
-                    <input id="from" name="from" type="date" value="{{ $range['from_input'] }}" class="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
-                </div>
+                    <div>
+                        <label for="to" class="text-xs uppercase tracking-[0.18em] text-slate-500">To</label>
+                        <input id="to" name="to" type="date" value="{{ $range['to_input'] }}" class="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
+                    </div>
 
-                <div>
-                    <label for="to" class="text-xs uppercase tracking-[0.18em] text-slate-500">To</label>
-                    <input id="to" name="to" type="date" value="{{ $range['to_input'] }}" class="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
-                </div>
-
-                <button type="submit" class="rounded-2xl bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-300">
-                    Apply
-                </button>
-
-                <a href="{{ route('dashboard', ['range' => '30d', 'focus' => $focus]) }}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-100 transition hover:bg-white/10">
-                    Reset
-                </a>
+                    <button type="submit" class="rounded-2xl bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-300">
+                        Apply
+                    </button>
             </form>
 
             @php
@@ -109,7 +105,7 @@
                                     <div class="absolute bottom-0 w-[70%] rounded-t-xl bg-rose-400" style="height: {{ $failHeight }}px"></div>
                                 @endif
                             </div>
-                            <div class="text-center text-[10px] text-slate-400">{{ $point->label }}</div>
+                            <div class="text-center text-[10px] text-slate-400 tabular-nums">{{ $point->label }}</div>
                         </div>
                     @endforeach
                 </div>

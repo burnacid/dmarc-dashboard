@@ -19,8 +19,28 @@ class DashboardController extends Controller
     {
         $user = $request->user();
         $range = $this->resolveRange($request);
-        $rangeQuery = $this->rangeQuery($range);
         $focus = $this->resolveFocus($request->string('focus')->toString());
+        $selectedDomain = trim((string) $request->input('domain', (string) $request->session()->get('filters.domain', '')));
+
+        $domainOptions = DB::table('dmarc_records')
+            ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+            ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
+            ->where('imap_accounts.user_id', $user->id)
+            ->selectRaw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain) as domain")
+            ->whereNotNull(DB::raw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain)"))
+            ->distinct()
+            ->orderBy('domain')
+            ->pluck('domain')
+            ->filter(fn ($domain) => is_string($domain) && trim($domain) !== '')
+            ->values();
+
+        if ($selectedDomain !== '' && ! $domainOptions->contains($selectedDomain)) {
+            $selectedDomain = '';
+        }
+
+        $request->session()->put('filters.domain', $selectedDomain);
+
+        $rangeQuery = $this->rangeQuery($range, $selectedDomain);
 
         $accounts = $user->imapAccounts()
             ->withCount('reports')
@@ -30,6 +50,7 @@ class DashboardController extends Controller
         $recentReports = DmarcReport::query()
             ->with('account:id,name,user_id')
             ->whereHas('account', fn ($query) => $query->where('user_id', $user->id))
+            ->when($selectedDomain !== '', fn ($query) => $query->where('policy_domain', $selectedDomain))
             ->where(function ($query) use ($range): void {
                 $query
                     ->whereBetween('report_end_at', [$range['start'], $range['end']])
@@ -48,6 +69,22 @@ class DashboardController extends Controller
             ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
             ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
             ->where('imap_accounts.user_id', $user->id)
+            ->when(
+                $selectedDomain !== '',
+                fn ($query) => $query->where(function ($domainQuery) use ($selectedDomain): void {
+                    $domainQuery
+                        ->where('dmarc_records.header_from', $selectedDomain)
+                        ->orWhere(function ($fallbackQuery) use ($selectedDomain): void {
+                            $fallbackQuery
+                                ->where(function ($emptyHeader): void {
+                                    $emptyHeader
+                                        ->whereNull('dmarc_records.header_from')
+                                        ->orWhere('dmarc_records.header_from', '');
+                                })
+                                ->where('dmarc_reports.policy_domain', $selectedDomain);
+                        });
+                })
+            )
             ->whereRaw('COALESCE(dmarc_reports.report_end_at, dmarc_reports.created_at) BETWEEN ? AND ?', [$range['start'], $range['end']])
             ->select([
                 'dmarc_records.*',
@@ -130,6 +167,8 @@ class DashboardController extends Controller
             'rangeOptions' => $this->rangeOptions(),
             'focus' => $focus,
             'focusOptions' => $this->focusOptions(),
+            'domainOptions' => $domainOptions,
+            'selectedDomain' => $selectedDomain,
             'failureSummary' => $failureSummary,
             'focusedFailures' => $focusedFailures,
             'stats' => [
@@ -274,21 +313,33 @@ class DashboardController extends Controller
     }
 
     /**
-     * @return array{range:string,from?:string,to?:string}
+     * @return array{range:string,domain?:string,from?:string,to?:string}
      */
-    private function rangeQuery(array $range): array
+    private function rangeQuery(array $range, string $selectedDomain = ''): array
     {
         if (($range['value'] ?? '') === 'custom' && ($range['from_input'] ?? '') !== '' && ($range['to_input'] ?? '') !== '') {
-            return [
+            $query = [
                 'range' => 'custom',
                 'from' => (string) $range['from_input'],
                 'to' => (string) $range['to_input'],
             ];
+
+            if ($selectedDomain !== '') {
+                $query['domain'] = $selectedDomain;
+            }
+
+            return $query;
         }
 
-        return [
+        $query = [
             'range' => (string) ($range['value'] ?? '30d'),
         ];
+
+        if ($selectedDomain !== '') {
+            $query['domain'] = $selectedDomain;
+        }
+
+        return $query;
     }
 
     private function parseDateInput(string $value): ?Carbon
@@ -318,7 +369,7 @@ class DashboardController extends Controller
             $key = $cursor->format('Y-m-d');
             $buckets->put($key, (object) [
                 'key' => $key,
-                'label' => $cursor->format('M j'),
+                'label' => $cursor->format('M d'),
                 'total_messages' => 0,
                 'failed_messages' => 0,
                 'passed_messages' => 0,
