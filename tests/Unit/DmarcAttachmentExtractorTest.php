@@ -65,5 +65,30 @@ class DmarcAttachmentExtractorTest extends TestCase
         $this->assertCount(1, $payloads);
         $this->assertStringContainsString('<feedback>', $payloads[0]);
     }
-}
 
+    public function test_it_extracts_xml_from_base64_encoded_zip(): void
+    {
+        if (! class_exists(ZipArchive::class)) {
+            $this->markTestSkipped('ZipArchive extension is not available.');
+        }
+
+        $xml = '<feedback><report_metadata><report_id>b64-zip</report_id></report_metadata></feedback>';
+        $tmpFile = tempnam(sys_get_temp_dir(), 'zip_test_');
+        $zip = new ZipArchive();
+        $zip->open($tmpFile, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        $zip->addFromString('report.xml', $xml);
+        $zip->close();
+
+        $binary = file_get_contents($tmpFile);
+        @unlink($tmpFile);
+
+        // Simulate case where Webklex returns base64 text instead of decoded binary
+        $base64Content = base64_encode($binary);
+
+        $payloads = app(DmarcAttachmentExtractor::class)->extractXmlPayloads([
+            ['name' => 'google.com!example.nl!12345.zip', 'content_type' => 'application/zip', 'content' => $base64Content],
+        ]);
+
+        $this->assertSame([$xml], $payloads);
+    }
+}
