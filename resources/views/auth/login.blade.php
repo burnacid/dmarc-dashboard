@@ -78,6 +78,12 @@
                 </a>
             @endif
 
+            @if (config('app.registration_enabled', true) && Route::has('register'))
+                <a class="ms-3 rounded-md text-sm text-slate-300 underline underline-offset-4 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-0" href="{{ route('register') }}">
+                    {{ __('Create an account') }}
+                </a>
+            @endif
+
             <x-primary-button class="ms-3">
                 {{ __('Log in') }}
             </x-primary-button>
