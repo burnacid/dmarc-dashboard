@@ -6,6 +6,7 @@ use App\Http\Controllers\DmarcReportController;
 use App\Http\Controllers\DomainFilterController;
 use App\Http\Controllers\ImapAccountController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReportSettingsController;
 use App\Http\Controllers\SecurityController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('imap-accounts', ImapAccountController::class)->except(['show']);
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('/profile/report-settings', [ReportSettingsController::class, 'update'])->name('profile.report-settings.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     Route::prefix('security')->name('security.')->group(function () {

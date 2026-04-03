@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -13,10 +14,12 @@ class DmarcReportController extends Controller
     public function index(Request $request): View
     {
         $user = $request->user();
+        $rangeOptions = $this->rangeOptionsForUser($user);
         $range = $this->resolveRange(
             $request->string('range')->toString(),
             trim((string) $request->input('from', '')),
             trim((string) $request->input('to', '')),
+            $rangeOptions,
         );
 
         $filters = [
@@ -91,7 +94,7 @@ class DmarcReportController extends Controller
             'reports' => $reports,
             'accounts' => $accounts,
             'filters' => $filters,
-            'rangeOptions' => $this->rangeOptions(),
+            'rangeOptions' => $rangeOptions,
         ]);
     }
 
@@ -116,15 +119,18 @@ class DmarcReportController extends Controller
     /**
      * @return array<string, string>
      */
-    private function rangeOptions(): array
+    private function rangeOptionsForUser(User $user): array
     {
+        $allowed = User::allowedRangePresets();
+        $selected = $user->normalizedRangePresets();
+        $presetOptions = collect($selected)
+            ->filter(fn (string $preset) => array_key_exists($preset, $allowed))
+            ->mapWithKeys(fn (string $preset) => [$preset => $allowed[$preset]])
+            ->all();
+
         return [
             'all' => 'All time',
-            '7d' => '7 days',
-            '30d' => '30 days',
-            '90d' => '90 days',
-            '180d' => '6 months',
-            '365d' => '12 months',
+            ...$presetOptions,
             'custom' => 'Custom',
         ];
     }
@@ -132,7 +138,7 @@ class DmarcReportController extends Controller
     /**
      * @return array{value:string,start:Carbon|null,end:Carbon|null,from_input:string,to_input:string}
      */
-    private function resolveRange(string $range, string $fromInput, string $toInput): array
+    private function resolveRange(string $range, string $fromInput, string $toInput, array $rangeOptions): array
     {
         if ($fromInput !== '' || $toInput !== '' || $range === 'custom') {
             $start = $this->parseDateInput($fromInput)?->startOfDay();
@@ -159,7 +165,7 @@ class DmarcReportController extends Controller
             ];
         }
 
-        if (array_key_exists($range, $this->rangeOptions()) && str_ends_with($range, 'd')) {
+        if (array_key_exists($range, $rangeOptions) && str_ends_with($range, 'd')) {
             $days = (int) rtrim($range, 'd');
 
             return [

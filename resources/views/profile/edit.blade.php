@@ -19,6 +19,12 @@
         </div>
 
         <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+            <div class="max-w-2xl">
+                @include('profile.partials.report-settings-form')
+            </div>
+        </div>
+
+        <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
             @include('profile.partials.security-settings')
         </div>
 

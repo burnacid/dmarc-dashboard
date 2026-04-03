@@ -12,3 +12,7 @@ Schedule::command('dmarc:poll')
     ->everyMinute()
     ->withoutOverlapping();
 
+Schedule::command('dmarc:prune-reports')
+    ->dailyAt('02:15')
+    ->withoutOverlapping();
+

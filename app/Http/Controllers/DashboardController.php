@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DmarcRecord;
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
+use App\Models\User;
 use App\Services\Dmarc\DmarcIngestionService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -18,7 +19,8 @@ class DashboardController extends Controller
     public function index(Request $request): View
     {
         $user = $request->user();
-        $range = $this->resolveRange($request);
+        $rangeOptions = $this->rangeOptionsForUser($user);
+        $range = $this->resolveRange($request, $rangeOptions);
         $focus = $this->resolveFocus($request->string('focus')->toString());
         $selectedDomain = trim((string) $request->input('domain', (string) $request->session()->get('filters.domain', '')));
 
@@ -164,7 +166,7 @@ class DashboardController extends Controller
             'timeSeries' => $timeSeries,
             'range' => $range,
             'rangeQuery' => $rangeQuery,
-            'rangeOptions' => $this->rangeOptions(),
+            'rangeOptions' => $rangeOptions,
             'focus' => $focus,
             'focusOptions' => $this->focusOptions(),
             'domainOptions' => $domainOptions,
@@ -245,7 +247,24 @@ class DashboardController extends Controller
             ->first()?->diffForHumans();
     }
 
-    private function rangeOptions(): array
+    /**
+     * @return array<string, string>
+     */
+    private function rangeOptionsForUser(User $user): array
+    {
+        $allowed = User::allowedRangePresets();
+        $selected = $user->normalizedRangePresets();
+
+        return collect($selected)
+            ->filter(fn (string $preset) => array_key_exists($preset, $allowed))
+            ->mapWithKeys(fn (string $preset) => [$preset => $allowed[$preset]])
+            ->all();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function defaultRangeOptions(): array
     {
         return [
             '7d' => '7 days',
@@ -253,7 +272,6 @@ class DashboardController extends Controller
             '90d' => '90 days',
             '180d' => '6 months',
             '365d' => '12 months',
-            'custom' => 'Custom',
         ];
     }
 
@@ -268,7 +286,7 @@ class DashboardController extends Controller
         ];
     }
 
-    private function resolveRange(Request $request): array
+    private function resolveRange(Request $request, array $rangeOptions): array
     {
         $fromInput = trim((string) $request->input('from', ''));
         $toInput = trim((string) $request->input('to', ''));
@@ -292,9 +310,13 @@ class DashboardController extends Controller
         }
 
         $range = $request->string('range')->toString();
-        $range = array_key_exists($range, $this->rangeOptions()) ? $range : '30d';
+        $fallbackRange = array_key_exists('30d', $rangeOptions)
+            ? '30d'
+            : (array_key_first($rangeOptions) ?: '30d');
+
+        $range = array_key_exists($range, $rangeOptions) ? $range : $fallbackRange;
         if ($range === 'custom') {
-            $range = '30d';
+            $range = $fallbackRange;
         }
         $days = (int) rtrim($range, 'd');
         $end = now()->endOfDay();
@@ -302,7 +324,7 @@ class DashboardController extends Controller
 
         return [
             'value' => $range,
-            'label' => $this->rangeOptions()[$range],
+            'label' => $rangeOptions[$range] ?? ($this->defaultRangeOptions()[$range] ?? '30 days'),
             'start' => $start,
             'end' => $end,
             'days' => $days,
