@@ -21,6 +21,7 @@ class ImapAccount extends Model
         'password',
         'folder',
         'processed_folder',
+        'error_folder',
         'search_criteria',
         'is_active',
     ];

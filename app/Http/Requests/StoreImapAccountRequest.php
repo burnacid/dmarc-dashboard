@@ -18,6 +18,7 @@ class StoreImapAccountRequest extends FormRequest
             'is_active' => $this->boolean('is_active'),
             'folder' => $this->input('folder', 'INBOX'),
             'processed_folder' => trim((string) $this->input('processed_folder', '')) ?: null,
+            'error_folder' => trim((string) $this->input('error_folder', '')) ?: null,
             'search_criteria' => strtoupper((string) $this->input('search_criteria', 'UNSEEN')),
         ]);
     }
@@ -34,6 +35,7 @@ class StoreImapAccountRequest extends FormRequest
             'password' => ['required', 'string', 'max:255'],
             'folder' => ['required', 'string', 'max:255'],
             'processed_folder' => ['nullable', 'string', 'max:255', 'different:folder'],
+            'error_folder' => ['nullable', 'string', 'max:255', 'different:folder', 'different:processed_folder'],
             'search_criteria' => ['required', 'string', 'max:50'],
             'is_active' => ['required', 'boolean'],
         ];

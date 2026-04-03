@@ -24,6 +24,7 @@ class ImapAccountTest extends TestCase
             'password' => 'secret-app-password',
             'folder' => 'INBOX',
             'processed_folder' => 'DMARC/Processed',
+            'error_folder' => 'DMARC/Errors',
             'search_criteria' => 'UNSEEN',
             'is_active' => true,
         ]);
@@ -36,6 +37,7 @@ class ImapAccountTest extends TestCase
             'host' => 'imap.example.com',
             'username' => 'reports@example.com',
             'processed_folder' => 'DMARC/Processed',
+            'error_folder' => 'DMARC/Errors',
         ]);
     }
 
@@ -66,6 +68,7 @@ class ImapAccountTest extends TestCase
             'password' => '',
             'folder' => 'Reports',
             'processed_folder' => 'Processed/DMARC',
+            'error_folder' => 'Errors/DMARC',
             'search_criteria' => 'ALL',
             'is_active' => false,
         ]);
@@ -77,6 +80,7 @@ class ImapAccountTest extends TestCase
         $this->assertSame('Updated Inbox', $account->name);
         $this->assertSame('Reports', $account->folder);
         $this->assertSame('Processed/DMARC', $account->processed_folder);
+        $this->assertSame('Errors/DMARC', $account->error_folder);
         $this->assertSame('ALL', $account->search_criteria);
         $this->assertFalse($account->is_active);
         $this->assertSame($originalPassword, $account->getRawOriginal('password'));

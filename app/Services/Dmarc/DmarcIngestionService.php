@@ -77,10 +77,27 @@ class DmarcIngestionService
                         } catch (Throwable $exception) {
                             $stats['errors']++;
 
+                            $movedToErrorFolder = false;
+
+                            if (filled($account->error_folder)) {
+                                try {
+                                    $movedToErrorFolder = $message->move($account->error_folder) !== null;
+                                } catch (Throwable $moveException) {
+                                    Log::warning('Failed to move errored DMARC message to error folder.', [
+                                        'imap_account_id' => $account->id,
+                                        'target_folder' => $account->error_folder,
+                                        'message_id' => $this->messageId($message),
+                                        'move_error' => $moveException->getMessage(),
+                                    ]);
+                                }
+                            }
+
                             Log::warning('Failed to process DMARC message.', [
                                 'imap_account_id' => $account->id,
                                 'message_id' => $this->messageId($message),
                                 'error' => $exception->getMessage(),
+                                'error_folder' => $account->error_folder,
+                                'moved_to_error_folder' => $movedToErrorFolder,
                             ]);
                         } finally {
                             unset($message);

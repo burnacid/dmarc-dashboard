@@ -56,6 +56,10 @@
                         <dd class="mt-2 text-sm font-medium text-white">{{ $account->processed_folder ?: 'Keep in source folder' }}</dd>
                     </div>
                     <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <dt class="text-xs uppercase tracking-[0.2em] text-slate-500">Errors to</dt>
+                        <dd class="mt-2 text-sm font-medium text-white">{{ $account->error_folder ?: 'Keep in source folder' }}</dd>
+                    </div>
+                    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
                         <dt class="text-xs uppercase tracking-[0.2em] text-slate-500">Reports</dt>
                         <dd class="mt-2 text-sm font-medium text-white">{{ $account->reports_count }}</dd>
                     </div>

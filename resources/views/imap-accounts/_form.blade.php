@@ -57,6 +57,13 @@
     </div>
 
     <div class="space-y-2">
+        <label for="error_folder" class="text-sm font-medium text-slate-200">Import error folder</label>
+        <input id="error_folder" name="error_folder" type="text" value="{{ old('error_folder', $account->error_folder) }}" placeholder="DMARC/Error" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-0">
+        <p class="text-xs text-slate-500">Optional. Messages that fail to import will be moved here for manual review.</p>
+        @error('error_folder') <p class="text-sm text-rose-300">{{ $message }}</p> @enderror
+    </div>
+
+    <div class="space-y-2">
         <label for="search_criteria" class="text-sm font-medium text-slate-200">Search criteria</label>
         <input id="search_criteria" name="search_criteria" type="text" value="{{ old('search_criteria', $account->search_criteria ?? 'UNSEEN') }}" required class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm uppercase text-white placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-0">
         <p class="text-xs text-slate-500">Examples: <code>UNSEEN</code>, <code>ALL</code>, <code>SEEN</code>.</p>
