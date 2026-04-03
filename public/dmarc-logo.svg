@@ -1,0 +1,34 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+        </linearGradient>
+        <filter id="shadow">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+        </filter>
+    </defs>
+
+    <!-- Background -->
+    <rect width="128" height="128" fill="#0f172a" rx="16"/>
+
+    <!-- Shield -->
+    <path d="M64 16L24 32V60C24 88 64 112 64 112C64 112 104 88 104 60V32L64 16Z"
+          fill="url(#shieldGradient)" filter="url(#shadow)"/>
+
+    <!-- Shield border -->
+    <path d="M64 16L24 32V60C24 88 64 112 64 112C64 112 104 88 104 60V32L64 16Z"
+          fill="none" stroke="#ffffff" stroke-width="2" opacity="0.5"/>
+
+    <!-- Envelope inside shield -->
+    <g transform="translate(64, 60) scale(0.6)">
+        <!-- Envelope body -->
+        <rect x="-20" y="-12" width="40" height="24" rx="2" fill="white" opacity="0.2" stroke="white" stroke-width="1.5" stroke-opacity="0.4"/>
+
+        <!-- Envelope flap -->
+        <path d="M-20,-12L0,4L20,-12" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+
+        <!-- Checkmark -->
+        <path d="M-8,0L-2,6L8,-4" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+    </g>
+</svg>
