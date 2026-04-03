@@ -71,6 +71,27 @@ class DmarcReportIndexTest extends TestCase
             ->assertSee(route('reports.show', $matching), false);
     }
 
+    public function test_reports_index_domain_filter_is_populated_from_discovered_user_domains_only(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $account = $this->makeAccount($user, 'Primary Inbox');
+        $otherAccount = $this->makeAccount($otherUser, 'Other Inbox');
+
+        $this->makeReport($account, 'rep-1', 'Google', 'alpha.example', now()->subDay());
+        $this->makeReport($account, 'rep-2', 'Google', 'beta.example', now()->subHours(12));
+        $this->makeReport($otherAccount, 'rep-3', 'Yahoo', 'foreign.example', now()->subHours(6));
+
+        $response = $this->actingAs($user)->get(route('reports.index'));
+
+        $response->assertOk()
+            ->assertSee('All domains')
+            ->assertSee('alpha.example')
+            ->assertSee('beta.example')
+            ->assertDontSee('foreign.example');
+    }
+
     public function test_reports_index_filters_by_preset_and_custom_time_ranges(): void
     {
         $user = User::factory()->create();

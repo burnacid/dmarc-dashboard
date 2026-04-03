@@ -37,6 +37,14 @@ class DmarcReportController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
+        $domains = DmarcReport::query()
+            ->whereHas('account', fn ($query) => $query->where('user_id', $user->id))
+            ->whereNotNull('policy_domain')
+            ->where('policy_domain', '!=', '')
+            ->distinct()
+            ->orderBy('policy_domain')
+            ->pluck('policy_domain');
+
         $reports = DmarcReport::query()
             ->with('account:id,name,user_id')
             ->with('records:id,dmarc_report_id,message_count,dkim,spf')
@@ -44,7 +52,7 @@ class DmarcReportController extends Controller
             ->withSum('records as total_messages', 'message_count')
             ->whereHas('account', fn ($query) => $query->where('user_id', $user->id))
             ->when($filters['account_id'], fn ($query, $accountId) => $query->where('imap_account_id', $accountId))
-            ->when($filters['domain'] !== '', fn ($query) => $query->where('policy_domain', 'like', '%'.$filters['domain'].'%'))
+            ->when($filters['domain'] !== '', fn ($query) => $query->where('policy_domain', $filters['domain']))
             ->when($filters['org'] !== '', fn ($query) => $query->where('org_name', 'like', '%'.$filters['org'].'%'))
             ->when($filters['report_id'] !== '', fn ($query) => $query->where('external_report_id', 'like', '%'.$filters['report_id'].'%'))
             ->when(
@@ -76,6 +84,7 @@ class DmarcReportController extends Controller
         return view('dmarc-reports.index', [
             'reports' => $reports,
             'accounts' => $accounts,
+            'domains' => $domains,
             'filters' => $filters,
             'rangeOptions' => $this->rangeOptions(),
         ]);

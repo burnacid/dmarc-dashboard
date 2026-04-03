@@ -28,7 +28,12 @@
 
                 <div class="space-y-2">
                     <label for="domain" class="text-sm font-medium text-slate-200">Domain</label>
-                    <input id="domain" name="domain" type="text" value="{{ $filters['domain'] }}" placeholder="example.com" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-0">
+                    <select id="domain" name="domain" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-0">
+                        <option value="">All domains</option>
+                        @foreach ($domains as $domain)
+                            <option value="{{ $domain }}" @selected($filters['domain'] === $domain)>{{ $domain }}</option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <div class="space-y-2">

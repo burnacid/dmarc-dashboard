@@ -21,6 +21,20 @@ class ProfileTest extends TestCase
         $response->assertOk();
     }
 
+    public function test_profile_page_is_displayed_when_two_factor_is_enabled(): void
+    {
+        $user = User::factory()->create();
+        $user->createTwoFactorAuth();
+        $user->confirmTwoFactorAuth($user->makeTwoFactorCode());
+
+        $response = $this
+            ->actingAs($user)
+            ->get('/profile');
+
+        $response->assertOk();
+        $response->assertSeeText('Recovery codes');
+    }
+
     public function test_profile_information_can_be_updated(): void
     {
         $user = User::factory()->create();
