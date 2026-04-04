@@ -1,0 +1,82 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dmarc-dashboard:latest
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: http://localhost:8080
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: dmarc_dashboard
+      DB_USERNAME: dmarc
+      DB_PASSWORD: change-me
+      RUN_MIGRATIONS: "true"
+    depends_on:
+      - mysql
+    volumes:
+      - dmarc_storage:/var/www/html/storage
+
+  scheduler:
+    image: dmarc-dashboard:latest
+    restart: unless-stopped
+    command: ["php", "artisan", "schedule:work"]
+    env_file:
+      - .env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: dmarc_dashboard
+      DB_USERNAME: dmarc
+      DB_PASSWORD: change-me
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      - mysql
+    volumes:
+      - dmarc_storage:/var/www/html/storage
+
+  queue:
+    image: dmarc-dashboard:latest
+    restart: unless-stopped
+    command: ["php", "artisan", "queue:work", "--verbose", "--tries=1", "--timeout=0"]
+    env_file:
+      - .env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: dmarc_dashboard
+      DB_USERNAME: dmarc
+      DB_PASSWORD: change-me
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      - mysql
+    volumes:
+      - dmarc_storage:/var/www/html/storage
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: dmarc_dashboard
+      MYSQL_USER: dmarc
+      MYSQL_PASSWORD: change-me
+      MYSQL_ROOT_PASSWORD: change-root-password
+    ports:
+      - "3307:3306"
+    volumes:
+      - dmarc_mysql:/var/lib/mysql
+
+volumes:
+  dmarc_storage:
+  dmarc_mysql:
+

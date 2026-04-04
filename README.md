@@ -113,6 +113,24 @@ Run the automated test suite:
 php artisan test
 ```
 
+## Docker deployment
+
+This repository includes a production-oriented container setup:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `docker/entrypoint.sh`
+
+Start with:
+
+```powershell
+docker compose up --build -d
+```
+
+The app is served on `http://localhost:8080` by default.
+
+See `docker/README.md` for service details, persistence, and operations commands.
+
 ## Roadmap
 
 Planned next-step features:
