@@ -65,7 +65,12 @@ class DmarcAttachmentExtractor
             $payloads = [];
 
             foreach ($this->extractFromZip($payload) as $entry) {
-                $payloads = array_merge($payloads, $this->extractPayloadCandidates($entry, $name, 'application/octet-stream', $depth + 1));
+                $payloads = array_merge($payloads, $this->extractPayloadCandidates(
+                    $entry['content'],
+                    $entry['name'],
+                    'application/octet-stream',
+                    $depth + 1
+                ));
             }
 
             if ($payloads !== []) {
@@ -76,7 +81,12 @@ class DmarcAttachmentExtractor
             $b64decoded = base64_decode($payload, true);
             if ($b64decoded !== false && str_starts_with($b64decoded, "PK\x03\x04")) {
                 foreach ($this->extractFromZip($b64decoded) as $entry) {
-                    $payloads = array_merge($payloads, $this->extractPayloadCandidates($entry, $name, 'application/octet-stream', $depth + 1));
+                    $payloads = array_merge($payloads, $this->extractPayloadCandidates(
+                        $entry['content'],
+                        $entry['name'],
+                        'application/octet-stream',
+                        $depth + 1
+                    ));
                 }
             }
 
@@ -126,11 +136,13 @@ class DmarcAttachmentExtractor
     }
 
     /**
-     * @return array<int, string>
+     * @return array<int, array{name:string,content:string}>
      */
     private function extractFromZip(string $rawZip): array
     {
         if (! class_exists(ZipArchive::class)) {
+            Log::warning('ZipArchive extension is unavailable; cannot inspect ZIP attachment for DMARC payloads.');
+
             return [];
         }
 
@@ -147,7 +159,7 @@ class DmarcAttachmentExtractor
         }
 
         $zip = new ZipArchive();
-        $xmlPayloads = [];
+        $entries = [];
 
         $openResult = $zip->open($tmpPath);
 
@@ -171,20 +183,16 @@ class DmarcAttachmentExtractor
                 continue;
             }
 
-            if (str_ends_with($entryName, '.xml')) {
-                $xmlPayloads[] = $entryContent;
-            } elseif (str_ends_with($entryName, '.gz')) {
-                $decoded = @gzdecode($entryContent);
-                if (is_string($decoded) && $decoded !== '') {
-                    $xmlPayloads[] = $decoded;
-                }
-            }
+            $entries[] = [
+                'name' => $entryName,
+                'content' => $entryContent,
+            ];
         }
 
         $zip->close();
         @unlink($tmpPath);
 
-        return $xmlPayloads;
+        return $entries;
     }
 }
 
