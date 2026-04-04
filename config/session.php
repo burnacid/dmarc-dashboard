@@ -3,7 +3,6 @@
 use Illuminate\Support\Str;
 
 return [
-
     /*
     |--------------------------------------------------------------------------
     | Default Session Driver
@@ -228,6 +227,5 @@ return [
     |
     */
 
-    'serialization' => 'json',
-
+    'serialization' => env('SESSION_SERIALIZATION', 'php'),
 ];
