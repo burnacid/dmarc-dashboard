@@ -451,5 +451,158 @@ class DashboardTest extends TestCase
             ->assertSee('SPF result')
             ->assertSee('spf.example.net');
     }
-}
 
+    public function test_dashboard_message_trend_bars_link_to_reports_filtered_on_day(): void
+    {
+        $user = User::factory()->create();
+
+        $account = ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $reportDate = now()->subDay();
+
+        $report = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'trend-report',
+            'org_name' => 'Trend Sender',
+            'email' => 'trend@example.com',
+            'report_begin_at' => $reportDate->copy()->subDay(),
+            'report_end_at' => $reportDate,
+            'policy_domain' => 'trend.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $report->id,
+            'source_ip' => '203.0.113.50',
+            'message_count' => 15,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'trend.example',
+        ]);
+
+        $expectedLink = route('reports.index', [
+            'range' => 'custom',
+            'from' => $reportDate->format('Y-m-d'),
+            'to' => $reportDate->format('Y-m-d'),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('href="'.e($expectedLink).'"', false);
+    }
+
+    public function test_dashboard_trend_drill_down_can_filter_reports_by_day_and_domain(): void
+    {
+        $user = User::factory()->create();
+
+        $account = ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $targetDate = now()->subDay();
+
+        $matchingReport = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'target-report',
+            'org_name' => 'Target Sender',
+            'email' => 'target@example.com',
+            'report_begin_at' => $targetDate->copy()->subDay(),
+            'report_end_at' => $targetDate,
+            'policy_domain' => 'alpha.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        $sameDayDifferentDomain = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'other-domain-report',
+            'org_name' => 'Other Domain Sender',
+            'email' => 'other-domain@example.com',
+            'report_begin_at' => $targetDate->copy()->subDay(),
+            'report_end_at' => $targetDate->copy()->addHour(),
+            'policy_domain' => 'beta.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        $differentDaySameDomain = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'other-day-report',
+            'org_name' => 'Other Day Sender',
+            'email' => 'other-day@example.com',
+            'report_begin_at' => $targetDate->copy()->subDays(3),
+            'report_end_at' => $targetDate->copy()->subDays(2),
+            'policy_domain' => 'alpha.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $matchingReport->id,
+            'source_ip' => '203.0.113.60',
+            'message_count' => 11,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'alpha.example',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $sameDayDifferentDomain->id,
+            'source_ip' => '203.0.113.61',
+            'message_count' => 7,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'beta.example',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $differentDaySameDomain->id,
+            'source_ip' => '203.0.113.62',
+            'message_count' => 9,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'alpha.example',
+        ]);
+
+        $drillDownUrl = route('reports.index', [
+            'range' => 'custom',
+            'from' => $targetDate->format('Y-m-d'),
+            'to' => $targetDate->format('Y-m-d'),
+            'domain' => 'alpha.example',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard', ['domain' => 'alpha.example']))
+            ->assertOk()
+            ->assertSee('href="'.e($drillDownUrl).'"', false);
+
+        $this->actingAs($user)
+            ->get($drillDownUrl)
+            ->assertOk()
+            ->assertSee('Target Sender')
+            ->assertDontSee('Other Domain Sender')
+            ->assertDontSee('Other Day Sender');
+    }
+}

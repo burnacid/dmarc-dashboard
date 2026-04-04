@@ -96,15 +96,26 @@
                             $failHeight = $point->total_messages > 0
                                 ? max(4, (int) round(($point->failed_messages / $trendMax) * 220))
                                 : 0;
+                            $reportLink = route('reports.index', array_filter([
+                                'range' => 'custom',
+                                'from' => $point->key,
+                                'to' => $point->key,
+                                'domain' => $selectedDomain,
+                            ], fn ($value) => $value !== ''));
                         @endphp
                         <div class="flex w-full min-w-[18px] flex-1 flex-col items-center gap-2">
                             <div class="text-[10px] text-slate-500">{{ number_format($point->total_messages) }}</div>
-                            <div class="relative flex h-[220px] w-full items-end justify-center rounded-t-2xl bg-white/5 px-1">
+                            <a
+                                href="{{ $reportLink }}"
+                                class="relative flex h-[220px] w-full items-end justify-center rounded-t-2xl bg-white/5 px-1 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                                aria-label="View reports for {{ $point->key }}"
+                                title="View reports for {{ $point->key }}"
+                            >
                                 <div class="w-full rounded-t-xl bg-sky-400/35" style="height: {{ $totalHeight }}px"></div>
                                 @if ($point->failed_messages > 0)
                                     <div class="absolute bottom-0 w-[70%] rounded-t-xl bg-rose-400" style="height: {{ $failHeight }}px"></div>
                                 @endif
-                            </div>
+                            </a>
                             <div class="text-center text-[10px] text-slate-400 tabular-nums">{{ $point->label }}</div>
                         </div>
                     @endforeach
@@ -114,6 +125,7 @@
             <div class="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-400">
                 <div class="flex items-center gap-2"><span class="h-3 w-3 rounded-full bg-sky-400/35"></span> Total messages</div>
                 <div class="flex items-center gap-2"><span class="h-3 w-3 rounded-full bg-rose-400"></span> Failed messages</div>
+                <div class="text-slate-500">Tip: click a bar to open reports for that day.</div>
             </div>
         </section>
 
@@ -134,8 +146,14 @@
                     @forelse ($domainVolumes as $domain)
                         @php
                             $percentage = min(100, (int) round(($domain->total_messages / $domainMax) * 100));
+                            $domainReportsLink = route('reports.index', array_merge($rangeQuery, ['domain' => $domain->domain]));
                         @endphp
-                        <div>
+                        <a
+                            href="{{ $domainReportsLink }}"
+                            title="View reports for {{ $domain->domain }}"
+                            aria-label="View reports for {{ $domain->domain }}"
+                            class="block rounded-2xl px-2 py-2 transition hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                        >
                             <div class="mb-2 flex items-center justify-between gap-4 text-sm">
                                 <p class="font-medium text-white">{{ $domain->domain }}</p>
                                 <p class="text-slate-300">{{ number_format((int) $domain->total_messages) }} msgs</p>
@@ -143,13 +161,15 @@
                             <div class="h-2.5 rounded-full bg-white/10">
                                 <div class="h-2.5 rounded-full bg-sky-400" style="width: {{ $percentage }}%"></div>
                             </div>
-                        </div>
+                        </a>
                     @empty
                         <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
                             No domain data yet.
                         </div>
                     @endforelse
                 </div>
+
+                <p class="mt-4 text-xs text-slate-500">Click a domain row to open matching reports.</p>
             </div>
 
             <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">

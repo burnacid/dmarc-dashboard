@@ -52,6 +52,8 @@ class DmarcReportController extends Controller
             $filters['domain'] = '';
         }
 
+        $drillDown = $this->buildDrillDownContext($filters, $range);
+
         $request->session()->put('filters.domain', $filters['domain']);
 
         $reports = DmarcReport::query()
@@ -95,6 +97,7 @@ class DmarcReportController extends Controller
             'accounts' => $accounts,
             'filters' => $filters,
             'rangeOptions' => $rangeOptions,
+            'drillDown' => $drillDown,
         ]);
     }
 
@@ -197,6 +200,57 @@ class DmarcReportController extends Controller
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * @param  array{account_id:int|null,domain:string,org:string,report_id:string,range:string,from:string,to:string,per_page:int}  $filters
+     * @param  array{value:string,start:Carbon|null,end:Carbon|null,from_input:string,to_input:string}  $range
+     * @return array{is_day_drilldown:bool,date:string|null,date_label:string|null,clear_url:string|null,previous_day_url:string|null,next_day_url:string|null}
+     */
+    private function buildDrillDownContext(array $filters, array $range): array
+    {
+        $isDayDrilldown = $range['value'] === 'custom'
+            && $range['from_input'] !== ''
+            && $range['from_input'] === $range['to_input'];
+
+        if (! $isDayDrilldown || $range['start'] === null) {
+            return [
+                'is_day_drilldown' => false,
+                'date' => null,
+                'date_label' => null,
+                'clear_url' => null,
+                'previous_day_url' => null,
+                'next_day_url' => null,
+            ];
+        }
+
+        $baseFilters = array_filter([
+            'account_id' => $filters['account_id'],
+            'domain' => $filters['domain'],
+            'org' => $filters['org'],
+            'report_id' => $filters['report_id'],
+            'per_page' => $filters['per_page'],
+        ], fn ($value) => $value !== null && $value !== '');
+
+        $date = $range['from_input'];
+        $current = $range['start']->copy()->startOfDay();
+
+        return [
+            'is_day_drilldown' => true,
+            'date' => $date,
+            'date_label' => $current->format('M d, Y'),
+            'clear_url' => route('reports.index', array_merge($baseFilters, ['range' => 'all'])),
+            'previous_day_url' => route('reports.index', array_merge($baseFilters, [
+                'range' => 'custom',
+                'from' => $current->copy()->subDay()->format('Y-m-d'),
+                'to' => $current->copy()->subDay()->format('Y-m-d'),
+            ])),
+            'next_day_url' => route('reports.index', array_merge($baseFilters, [
+                'range' => 'custom',
+                'from' => $current->copy()->addDay()->format('Y-m-d'),
+                'to' => $current->copy()->addDay()->format('Y-m-d'),
+            ])),
+        ];
     }
 }
 

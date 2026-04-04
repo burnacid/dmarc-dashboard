@@ -76,6 +76,24 @@
             </form>
         </section>
 
+        @if ($drillDown['is_day_drilldown'])
+            <section class="rounded-3xl border border-sky-300/30 bg-sky-400/10 p-5">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-sky-200">Dashboard drill-down</p>
+                        <p class="mt-1 text-sm text-slate-100">
+                            Filtered to {{ $drillDown['date_label'] }}{{ $filters['domain'] !== '' ? ' for '.$filters['domain'] : '' }}.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <a href="{{ $drillDown['previous_day_url'] }}" class="rounded-2xl border border-white/20 bg-white/5 px-3 py-2 text-xs font-medium text-slate-100 transition hover:bg-white/10">Previous day</a>
+                        <a href="{{ $drillDown['next_day_url'] }}" class="rounded-2xl border border-white/20 bg-white/5 px-3 py-2 text-xs font-medium text-slate-100 transition hover:bg-white/10">Next day</a>
+                        <a href="{{ $drillDown['clear_url'] }}" class="rounded-2xl bg-sky-300 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-sky-200">Clear date filter</a>
+                    </div>
+                </div>
+            </section>
+        @endif
+
         <section class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
             <div class="overflow-x-auto rounded-2xl border border-white/10">
                 <table class="min-w-full divide-y divide-white/10 text-sm">

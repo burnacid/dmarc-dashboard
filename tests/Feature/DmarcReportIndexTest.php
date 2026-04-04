@@ -155,6 +155,49 @@ class DmarcReportIndexTest extends TestCase
             ->assertSee('?per_page=10&amp;page=2', false);
     }
 
+    public function test_reports_index_shows_day_drill_down_banner_and_navigation_controls(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->makeAccount($user, 'Primary Inbox');
+
+        $reportedAt = now()->subDay()->startOfDay();
+        $this->makeReport($account, 'alpha-report', 'Alpha Org', 'alpha.example', $reportedAt);
+        $this->makeReport($account, 'beta-report', 'Beta Org', 'beta.example', $reportedAt->copy());
+
+        $response = $this->actingAs($user)->get(route('reports.index', [
+            'range' => 'custom',
+            'from' => $reportedAt->format('Y-m-d'),
+            'to' => $reportedAt->format('Y-m-d'),
+            'domain' => 'alpha.example',
+            'per_page' => 50,
+        ]));
+
+        $response->assertOk()
+            ->assertSee('Dashboard drill-down')
+            ->assertSee('Filtered to '.$reportedAt->format('M d, Y').' for alpha.example.')
+            ->assertSee(e(route('reports.index', [
+                'domain' => 'alpha.example',
+                'per_page' => 50,
+                'range' => 'custom',
+                'from' => $reportedAt->copy()->subDay()->format('Y-m-d'),
+                'to' => $reportedAt->copy()->subDay()->format('Y-m-d'),
+            ])), false)
+            ->assertSee(e(route('reports.index', [
+                'domain' => 'alpha.example',
+                'per_page' => 50,
+                'range' => 'custom',
+                'from' => $reportedAt->copy()->addDay()->format('Y-m-d'),
+                'to' => $reportedAt->copy()->addDay()->format('Y-m-d'),
+            ])), false)
+            ->assertSee(e(route('reports.index', [
+                'domain' => 'alpha.example',
+                'per_page' => 50,
+                'range' => 'all',
+            ])), false)
+            ->assertSee('Alpha Org')
+            ->assertDontSee('Beta Org');
+    }
+
     private function makeAccount(User $user, string $name): ImapAccount
     {
         return ImapAccount::query()->create([
