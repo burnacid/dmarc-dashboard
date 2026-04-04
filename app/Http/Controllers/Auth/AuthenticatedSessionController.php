@@ -28,7 +28,7 @@ class AuthenticatedSessionController extends Controller
 
         $user = $request->user();
 
-        if ($user?->hasTwoFactorEnabled()) {
+        if (config('app.totp_enabled', true) && $user?->hasTwoFactorEnabled()) {
             $request->session()->put('auth.two-factor', [
                 'user_id' => $user->getAuthIdentifier(),
                 'remember' => $request->boolean('remember'),

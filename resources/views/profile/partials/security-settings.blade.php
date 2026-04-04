@@ -28,7 +28,19 @@
         </div>
     @endif
 
+    @php
+        $totpEnabled = config('app.totp_enabled', true);
+        $passkeysEnabled = config('app.passkeys_enabled', true);
+    @endphp
+
+    @if (! $totpEnabled && ! $passkeysEnabled)
+        <div class="rounded-3xl border border-dashed border-white/10 bg-slate-900/40 px-5 py-6 text-sm text-slate-400">
+            {{ __('Passkeys and authenticator app sign-in are disabled by application configuration.') }}
+        </div>
+    @endif
+
     <div class="grid gap-6 xl:grid-cols-2">
+        @if ($totpEnabled)
         <div class="rounded-3xl border border-white/10 bg-slate-950/60 p-6 shadow-lg shadow-slate-950/20">
             <div class="flex items-start justify-between gap-4">
                 <div>
@@ -79,8 +91,8 @@
                         @csrf
 
                         <div>
-                            <x-input-label for="two_factor_code" :value="__('Step 2: enter the 6-digit code')" />
-                            <x-text-input id="two_factor_code" name="code" type="text" inputmode="numeric" class="mt-1 block w-full" autocomplete="one-time-code" maxlength="12" />
+                            <x-input-label for="two_factor_otp" :value="__('Step 2: enter the 6-digit verification code (TOTP)')" />
+                            <x-text-input id="two_factor_otp" name="otp" type="text" inputmode="numeric" class="mt-1 block w-full" autocomplete="one-time-code" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="12" />
                             <x-input-error class="mt-2" :messages="$errors->confirmTwoFactor->get('code')" />
                         </div>
 
@@ -160,7 +172,9 @@
                 </div>
             @endif
         </div>
+        @endif
 
+        @if ($passkeysEnabled)
         <div class="rounded-3xl border border-white/10 bg-slate-950/60 p-6 shadow-lg shadow-slate-950/20">
             <div class="flex items-start justify-between gap-4">
                 <div>
@@ -247,6 +261,7 @@
                 <x-input-error class="mt-2" :messages="$errors->deletePasskey->get('password')" />
             </div>
         </div>
+        @endif
     </div>
 </section>
 

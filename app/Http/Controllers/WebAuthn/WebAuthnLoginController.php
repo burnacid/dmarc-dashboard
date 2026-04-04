@@ -16,6 +16,8 @@ class WebAuthnLoginController
      */
     public function options(AssertionRequest $request): Responsable
     {
+        abort_if(! config('app.passkeys_enabled', true), 404);
+
         return $request->toVerify($request->validate(['email' => 'sometimes|email|string']));
     }
 
@@ -24,6 +26,8 @@ class WebAuthnLoginController
      */
     public function login(AssertedRequest $request): JsonResponse
     {
+        abort_if(! config('app.passkeys_enabled', true), 404);
+
         $user = $request->login();
 
         return response()->json(

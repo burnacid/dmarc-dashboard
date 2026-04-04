@@ -15,17 +15,21 @@
         @csrf
 
         <div>
-            <x-input-label for="code" :value="__('Authentication code or recovery code')" />
+            <x-input-label for="otp" :value="__('Verification code (TOTP) or recovery code')" />
             <x-text-input
-                id="code"
+                id="otp"
                 class="mt-1 block w-full"
                 type="text"
-                name="code"
-                :value="old('code')"
+                name="otp"
+                :value="old('otp', old('code'))"
                 required
                 autofocus
                 autocomplete="one-time-code"
                 inputmode="numeric"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                maxlength="12"
             />
             <x-input-error :messages="$errors->get('code')" class="mt-2" />
         </div>

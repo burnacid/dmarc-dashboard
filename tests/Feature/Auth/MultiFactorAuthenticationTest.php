@@ -11,6 +11,16 @@ class MultiFactorAuthenticationTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config([
+            'app.totp_enabled' => true,
+            'app.passkeys_enabled' => true,
+        ]);
+    }
+
     public function test_users_with_two_factor_enabled_are_redirected_to_the_challenge_after_password_login(): void
     {
         $user = User::factory()->create();
@@ -48,6 +58,27 @@ class MultiFactorAuthenticationTest extends TestCase
         $response->assertRedirect(route('dashboard', absolute: false));
     }
 
+    public function test_two_factor_challenge_accepts_otp_field_name_for_password_managers(): void
+    {
+        $user = User::factory()->create();
+        $user->createTwoFactorAuth();
+        $user->confirmTwoFactorAuth($user->makeTwoFactorCode());
+
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(route('two-factor.challenge', absolute: false));
+
+        $this->travel(31)->seconds();
+
+        $response = $this->post('/two-factor-challenge', [
+            'otp' => $user->fresh()->makeTwoFactorCode(),
+        ]);
+
+        $this->assertAuthenticatedAs($user);
+        $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
     public function test_users_can_start_and_confirm_two_factor_from_the_security_page(): void
     {
         $user = User::factory()->create();
@@ -66,6 +97,25 @@ class MultiFactorAuthenticationTest extends TestCase
         $this->actingAs($user)
             ->post(route('security.two-factor.confirm'), [
                 'code' => $user->makeTwoFactorCode(),
+            ])
+            ->assertRedirect();
+
+        $this->assertTrue($user->fresh()->hasTwoFactorEnabled());
+    }
+
+    public function test_security_two_factor_confirmation_accepts_otp_field_name_for_password_managers(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('security.two-factor.store'), [
+                'password' => 'password',
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($user)
+            ->post(route('security.two-factor.confirm'), [
+                'otp' => $user->fresh()->makeTwoFactorCode(),
             ])
             ->assertRedirect();
 
@@ -115,6 +165,37 @@ class MultiFactorAuthenticationTest extends TestCase
         $this->assertDatabaseMissing('webauthn_credentials', [
             'id' => 'test-credential-id',
         ]);
+    }
+
+    public function test_totp_disabled_skips_two_factor_challenge_after_password_login(): void
+    {
+        config(['app.totp_enabled' => false]);
+
+        $user = User::factory()->create();
+        $user->createTwoFactorAuth();
+        $user->confirmTwoFactorAuth($user->makeTwoFactorCode());
+
+        $response = $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $response->assertRedirect(route('dashboard', absolute: false));
+        $response->assertSessionMissing('auth.two-factor');
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_totp_security_routes_return_404_when_disabled(): void
+    {
+        config(['app.totp_enabled' => false]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('security.two-factor.store'), [
+                'password' => 'password',
+            ])
+            ->assertNotFound();
     }
 }
 

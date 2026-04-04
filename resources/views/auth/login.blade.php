@@ -7,6 +7,7 @@
     <!-- Session Status -->
     <x-auth-session-status class="mb-4" :status="session('status')" />
 
+    @if (config('app.passkeys_enabled', true))
     <div class="mb-6 rounded-3xl border border-sky-400/20 bg-sky-500/5 p-4">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -40,6 +41,7 @@
             <span class="bg-slate-900 px-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">{{ __('Or continue with password') }}</span>
         </div>
     </div>
+    @endif
 
     <form method="POST" action="{{ route('login') }}">
         @csrf

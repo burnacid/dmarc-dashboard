@@ -24,4 +24,15 @@ class WebAuthnRegistrationTest extends TestCase
         $response->assertOk();
         $this->assertStringContainsString('challenge', $response->getContent());
     }
+
+    public function test_webauthn_register_options_returns_404_when_passkeys_are_disabled(): void
+    {
+        config(['app.passkeys_enabled' => false]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->postJson('/webauthn/register/options')
+            ->assertNotFound();
+    }
 }

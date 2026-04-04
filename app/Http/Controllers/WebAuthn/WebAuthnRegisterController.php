@@ -16,6 +16,8 @@ class WebAuthnRegisterController
      */
     public function options(AttestationRequest $request): Responsable
     {
+        abort_if(! config('app.passkeys_enabled', true), 404);
+
         return $request
             ->fastRegistration()
 //            ->userless()
@@ -28,6 +30,8 @@ class WebAuthnRegisterController
      */
     public function register(AttestedRequest $request): JsonResponse
     {
+        abort_if(! config('app.passkeys_enabled', true), 404);
+
         $alias = trim((string) $request->input('alias', ''));
 
         return response()->json([

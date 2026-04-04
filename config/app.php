@@ -135,4 +135,8 @@ return [
 
     'registration_enabled' => (bool) env('APP_REGISTRATION_ENABLED', true),
 
+    'passkeys_enabled' => (bool) env('APP_PASSKEYS_ENABLED', true),
+
+    'totp_enabled' => (bool) env('APP_TOTP_ENABLED', true),
+
 ];

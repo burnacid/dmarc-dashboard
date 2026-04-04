@@ -17,6 +17,16 @@ class AuthenticationTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_login_screen_hides_passkey_prompt_when_passkeys_are_disabled(): void
+    {
+        config(['app.passkeys_enabled' => false]);
+
+        $response = $this->get('/login');
+
+        $response->assertOk();
+        $response->assertDontSee('Passkey sign in');
+    }
+
     public function test_users_can_authenticate_using_the_login_screen(): void
     {
         $user = User::factory()->create();

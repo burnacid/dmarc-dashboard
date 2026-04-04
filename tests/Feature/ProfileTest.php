@@ -10,6 +10,16 @@ class ProfileTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config([
+            'app.totp_enabled' => true,
+            'app.passkeys_enabled' => true,
+        ]);
+    }
+
     public function test_profile_page_is_displayed(): void
     {
         $user = User::factory()->create();
@@ -33,6 +43,34 @@ class ProfileTest extends TestCase
 
         $response->assertOk();
         $response->assertSeeText('Recovery codes');
+    }
+
+    public function test_profile_page_hides_totp_section_when_totp_is_disabled(): void
+    {
+        config(['app.totp_enabled' => false]);
+
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->get('/profile');
+
+        $response->assertOk();
+        $response->assertDontSeeText('Authenticator app (TOTP)');
+    }
+
+    public function test_profile_page_hides_passkeys_section_when_passkeys_are_disabled(): void
+    {
+        config(['app.passkeys_enabled' => false]);
+
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->get('/profile');
+
+        $response->assertOk();
+        $response->assertDontSeeText('Passkeys');
     }
 
     public function test_profile_information_can_be_updated(): void

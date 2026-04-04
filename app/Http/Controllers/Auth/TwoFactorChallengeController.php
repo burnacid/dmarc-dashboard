@@ -14,6 +14,8 @@ class TwoFactorChallengeController extends Controller
 {
     public function create(Request $request): RedirectResponse|View
     {
+        abort_if(! config('app.totp_enabled', true), 404);
+
         $user = $this->pendingUser($request);
 
         if (! $user) {
@@ -29,6 +31,12 @@ class TwoFactorChallengeController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        abort_if(! config('app.totp_enabled', true), 404);
+
+        $request->merge([
+            'code' => $this->resolveOtpCode($request),
+        ]);
+
         $request->validate([
             'code' => ['required', 'string'],
         ]);
@@ -58,6 +66,10 @@ class TwoFactorChallengeController extends Controller
 
     protected function pendingUser(Request $request): ?User
     {
+        if (! config('app.totp_enabled', true)) {
+            return null;
+        }
+
         $state = $request->session()->get('auth.two-factor');
 
         if (! is_array($state) || empty($state['user_id'])) {
@@ -71,6 +83,19 @@ class TwoFactorChallengeController extends Controller
         }
 
         return $user;
+    }
+
+    private function resolveOtpCode(Request $request): string
+    {
+        foreach (['code', 'otp', 'totp', 'verification_code', 'mfa_code', 'two_factor_code'] as $key) {
+            $value = trim((string) $request->input($key, ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
     }
 }
 
