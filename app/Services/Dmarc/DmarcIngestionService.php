@@ -13,6 +13,8 @@ class DmarcIngestionService
 {
     private const CHUNK_SIZE = 50;
 
+    private const SPAM_FLAGS = ['junk', '$junk', 'spam', '$spam'];
+
     public function __construct(
         private readonly DmarcAttachmentExtractor $attachmentExtractor,
         private readonly DmarcXmlParser $xmlParser,
@@ -32,18 +34,7 @@ class DmarcIngestionService
         ];
 
         try {
-            $clientManager = new ClientManager();
-            $client = $clientManager->make([
-                'host' => $account->host,
-                'port' => $account->port,
-                'encryption' => $account->encryption === 'none' ? false : $account->encryption,
-                'validate_cert' => true,
-                'username' => $account->username,
-                'password' => $account->password,
-                'protocol' => 'imap',
-                'timeout' => 300,
-                'fetch' => 'ALL',
-            ]);
+            $client = $this->createClient($account);
 
             $client->connect();
 
@@ -58,39 +49,42 @@ class DmarcIngestionService
                         $stats['processed_messages']++;
 
                         try {
-                            $importsFromMessage = $this->importMessage($account, $message);
-                            $stats['imported_reports'] += $importsFromMessage;
-
-                            if ($importsFromMessage > 0 && filled($account->processed_folder)) {
-                                if ($message->move($account->processed_folder) !== null) {
+                            if ($this->isSpamMessage($message)) {
+                                if ($this->moveMessageToFolder($account, $message, $account->error_folder, 'spam DMARC message')) {
                                     $stats['moved_messages']++;
                                 } else {
                                     $stats['errors']++;
+                                }
 
-                                    Log::warning('DMARC message imported but could not be moved.', [
-                                        'imap_account_id' => $account->id,
-                                        'target_folder' => $account->processed_folder,
-                                        'message_id' => $this->messageId($message),
-                                    ]);
+                                continue;
+                            }
+
+                            $importsFromMessage = $this->importMessage($account, $message);
+                            $stats['imported_reports'] += $importsFromMessage;
+
+                            if ($importsFromMessage === 0) {
+                                if ($this->moveMessageToFolder($account, $message, $account->error_folder, 'DMARC message with no detectable payload')) {
+                                    $stats['moved_messages']++;
+                                } else {
+                                    $stats['errors']++;
+                                }
+
+                                continue;
+                            }
+
+                            $this->markMessageAsRead($account, $message, 'imported DMARC message');
+
+                            if ($importsFromMessage > 0 && filled($account->processed_folder)) {
+                                if ($this->moveMessageToFolder($account, $message, $account->processed_folder, 'imported DMARC message')) {
+                                    $stats['moved_messages']++;
+                                } else {
+                                    $stats['errors']++;
                                 }
                             }
                         } catch (Throwable $exception) {
                             $stats['errors']++;
 
-                            $movedToErrorFolder = false;
-
-                            if (filled($account->error_folder)) {
-                                try {
-                                    $movedToErrorFolder = $message->move($account->error_folder) !== null;
-                                } catch (Throwable $moveException) {
-                                    Log::warning('Failed to move errored DMARC message to error folder.', [
-                                        'imap_account_id' => $account->id,
-                                        'target_folder' => $account->error_folder,
-                                        'message_id' => $this->messageId($message),
-                                        'move_error' => $moveException->getMessage(),
-                                    ]);
-                                }
-                            }
+                            $movedToErrorFolder = $this->moveMessageToFolder($account, $message, $account->error_folder, 'errored DMARC message');
 
                             Log::warning('Failed to process DMARC message.', [
                                 'imap_account_id' => $account->id,
@@ -132,6 +126,25 @@ class DmarcIngestionService
         }
 
         return $stats;
+    }
+
+    protected function createClient(ImapAccount $account): mixed
+    {
+        $clientManager = new ClientManager([
+            'flags' => null,
+        ]);
+
+        return $clientManager->make([
+            'host' => $account->host,
+            'port' => $account->port,
+            'encryption' => $account->encryption === 'none' ? false : $account->encryption,
+            'validate_cert' => true,
+            'username' => $account->username,
+            'password' => $account->password,
+            'protocol' => 'imap',
+            'timeout' => 300,
+            'fetch' => 'ALL',
+        ]);
     }
 
     private function importMessage(ImapAccount $account, mixed $message): int
@@ -223,6 +236,82 @@ class DmarcIngestionService
         return $importedReports;
     }
 
+    private function isSpamMessage(mixed $message): bool
+    {
+        if (is_object($message) && method_exists($message, 'hasFlag')) {
+            foreach (self::SPAM_FLAGS as $flag) {
+                if ($message->hasFlag($flag)) {
+                    return true;
+                }
+            }
+        }
+
+        return collect([
+            'x-spam-flag' => fn (string $value): bool => strcasecmp(trim($value), 'yes') === 0,
+            'x-spam-status' => fn (string $value): bool => str_starts_with(strtolower(trim($value)), 'yes'),
+            'x-ms-exchange-organization-scl' => fn (string $value): bool => is_numeric(trim($value)) && (int) trim($value) >= 5,
+        ])->contains(fn ($matches, string $header) => ($value = $this->headerValue($message, $header)) !== null && $matches($value));
+    }
+
+    private function moveMessageToFolder(ImapAccount $account, mixed $message, ?string $targetFolder, string $description): bool
+    {
+        if (! filled($targetFolder)) {
+            Log::warning('DMARC message could not be moved because no target folder is configured.', [
+                'imap_account_id' => $account->id,
+                'target_folder' => $targetFolder,
+                'message_id' => $this->messageId($message),
+                'description' => $description,
+            ]);
+
+            return false;
+        }
+
+        try {
+            if ($message->move($targetFolder) !== null) {
+                return true;
+            }
+        } catch (Throwable $moveException) {
+            Log::warning('Failed to move DMARC message.', [
+                'imap_account_id' => $account->id,
+                'target_folder' => $targetFolder,
+                'message_id' => $this->messageId($message),
+                'description' => $description,
+                'move_error' => $moveException->getMessage(),
+            ]);
+
+            return false;
+        }
+
+        Log::warning('DMARC message could not be moved.', [
+            'imap_account_id' => $account->id,
+            'target_folder' => $targetFolder,
+            'message_id' => $this->messageId($message),
+            'description' => $description,
+        ]);
+
+        return false;
+    }
+
+    private function markMessageAsRead(ImapAccount $account, mixed $message, string $description): bool
+    {
+        if (! is_object($message) || ! method_exists($message, 'setFlag')) {
+            return false;
+        }
+
+        try {
+            return $message->setFlag('Seen');
+        } catch (Throwable $flagException) {
+            Log::warning('Failed to mark DMARC message as read.', [
+                'imap_account_id' => $account->id,
+                'message_id' => $this->messageId($message),
+                'description' => $description,
+                'flag_error' => $flagException->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
     private function applySearchCriteria(mixed $query, string $criteria): mixed
     {
         $criteria = strtoupper(trim($criteria));
@@ -235,6 +324,44 @@ class DmarcIngestionService
             'UNANSWERED' => $query->unanswered(),
             default => $query->where("CUSTOM {$criteria}"),
         };
+    }
+
+    private function headerValue(mixed $message, string $header): ?string
+    {
+        $messageHeader = method_exists($message, 'getHeader')
+            ? $message->getHeader()
+            : (is_object($message) ? ($message->header ?? null) : null);
+
+        if (! is_object($messageHeader)) {
+            return null;
+        }
+
+        if (method_exists($messageHeader, 'get')) {
+            $value = $messageHeader->get($header);
+
+            if (is_object($value) && method_exists($value, 'toArray')) {
+                $items = array_filter(array_map(
+                    static fn (mixed $item): string => trim((string) $item),
+                    $value->toArray()
+                ));
+
+                if ($items !== []) {
+                    return implode(' ', $items);
+                }
+            }
+
+            $stringValue = trim((string) $value);
+
+            if ($stringValue !== '') {
+                return $stringValue;
+            }
+        }
+
+        $property = str_replace(['-', ' '], '_', strtolower($header));
+        $propertyValue = is_object($messageHeader) ? ($messageHeader->{$property} ?? null) : null;
+        $stringValue = trim((string) $propertyValue);
+
+        return $stringValue !== '' ? $stringValue : null;
     }
 
     private function attachmentName(mixed $attachment): string
