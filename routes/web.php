@@ -19,6 +19,8 @@ Route::get('/', function () {
         : redirect()->route('login');
 })->name('home');
 
+Route::view('/privacy-policy', 'privacy-policy')->name('privacy-policy');
+
 Route::middleware('guest')->group(function () {
     Route::get('/two-factor-challenge', [TwoFactorChallengeController::class, 'create'])->name('two-factor.challenge');
     Route::post('/two-factor-challenge', [TwoFactorChallengeController::class, 'store'])->name('two-factor.challenge.store');
