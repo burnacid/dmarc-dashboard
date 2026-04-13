@@ -73,6 +73,7 @@
                                         </span>
                                     </div>
                                     <p class="mt-1 text-xs text-slate-400">Domain: {{ $record->dkim_domain ?? '—' }}</p>
+                                    <p class="mt-1 text-xs text-slate-400">Selector: {{ $record->dkim_selector ?? '—' }}</p>
                                 </div>
                                 <div class="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
                                     <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500">SPF result</p>
@@ -91,6 +92,61 @@
                         </div>
                     @endforelse
                 </div>
+            </div>
+        </div>
+
+        <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+            <h2 class="text-lg font-semibold text-white">Collected DNS records</h2>
+            <p class="mt-1 text-sm text-slate-400">Latest SPF, DMARC, and DKIM TXT snapshots related to this report.</p>
+
+            <div class="mt-5 grid gap-4 xl:grid-cols-3">
+                @foreach (['spf' => 'SPF', 'dmarc' => 'DMARC', 'dkim' => 'DKIM'] as $type => $label)
+                    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <h3 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300">{{ $label }}</h3>
+
+                        <div class="mt-3 space-y-3">
+                            @forelse (($dnsSnapshotContext[$type] ?? []) as $snapshot)
+                                @php
+                                    $status = strtolower((string) ($snapshot['status'] ?? 'not_collected'));
+                                    $statusClasses = match ($status) {
+                                        'found' => 'bg-emerald-400/15 text-emerald-200',
+                                        'error' => 'bg-rose-400/15 text-rose-200',
+                                        'not_found' => 'bg-amber-400/15 text-amber-200',
+                                        default => 'bg-white/10 text-slate-200',
+                                    };
+                                @endphp
+                                <div class="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <p class="text-sm font-medium text-slate-100">{{ $snapshot['domain'] }}</p>
+                                        <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses }}">{{ str_replace('_', ' ', $status) }}</span>
+                                    </div>
+
+                                    @if (! empty($snapshot['selector']))
+                                        <p class="mt-1 text-xs text-slate-400">Selector: {{ $snapshot['selector'] }}</p>
+                                    @endif
+
+                                    <p class="mt-1 break-all text-xs text-slate-500">Host: {{ $snapshot['host'] }}</p>
+
+                                    @if (! empty($snapshot['records']))
+                                        <div class="mt-2 space-y-1">
+                                            @foreach ($snapshot['records'] as $txt)
+                                                <p class="break-all rounded-lg border border-white/10 bg-slate-900/70 px-2 py-1 text-[11px] text-slate-300">{{ $txt }}</p>
+                                            @endforeach
+                                        </div>
+                                    @endif
+
+                                    <p class="mt-2 text-[11px] text-slate-500">
+                                        Fetched: {{ optional($snapshot['fetched_at'] ?? null)->format('Y-m-d H:i') ?? 'not collected yet' }}
+                                    </p>
+                                </div>
+                            @empty
+                                <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-3 text-sm text-slate-400">
+                                    No {{ $label }} candidates found in this report.
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+                @endforeach
             </div>
         </div>
 
