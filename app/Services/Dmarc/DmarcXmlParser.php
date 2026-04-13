@@ -16,7 +16,7 @@ class DmarcXmlParser
      *   report_begin_at:?Carbon,
      *   report_end_at:?Carbon,
      *   policy_domain:?string,
-     *   records:array<int, array{source_ip:string,message_count:int,disposition:?string,dkim:?string,dkim_domain:?string,spf:?string,spf_domain:?string,header_from:?string}>
+     *   records:array<int, array{source_ip:string,message_count:int,disposition:?string,dkim:?string,dkim_domain:?string,dkim_selector:?string,spf:?string,spf_domain:?string,header_from:?string}>
      * }
      */
     public function parse(string $xml): array
@@ -45,6 +45,7 @@ class DmarcXmlParser
                 'disposition' => $this->nullableString($record->row->policy_evaluated->disposition ?? null),
                 'dkim' => $this->nullableString($record->row->policy_evaluated->dkim ?? null),
                 'dkim_domain' => $this->firstAuthResultValue($record, 'dkim', 'domain'),
+                'dkim_selector' => $this->firstAuthResultValue($record, 'dkim', 'selector'),
                 'spf' => $this->nullableString($record->row->policy_evaluated->spf ?? null),
                 'spf_domain' => $this->firstAuthResultValue($record, 'spf', 'domain'),
                 'header_from' => $this->nullableString($record->identifiers->header_from ?? null),

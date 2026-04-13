@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class DmarcReportController extends Controller
@@ -110,6 +112,7 @@ class DmarcReportController extends Controller
         return view('dmarc-reports.show', [
             'report' => $dmarcReport,
             'formattedXml' => $this->formatXml($dmarcReport->raw_xml),
+            'dnsSnapshotContext' => $this->buildDnsSnapshotContext($dmarcReport, (int) auth()->id()),
         ]);
     }
 
@@ -252,5 +255,92 @@ class DmarcReportController extends Controller
             ])),
         ];
     }
-}
 
+    /**
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    private function buildDnsSnapshotContext(DmarcReport $report, int $userId): array
+    {
+        $domains = $report->records
+            ->map(fn ($record) => trim(strtolower((string) ($record->header_from ?: $report->policy_domain))))
+            ->filter(fn (string $domain) => $domain !== '')
+            ->unique()
+            ->values();
+
+        $dkimTargets = $report->records
+            ->map(function ($record): ?array {
+                $domain = trim(strtolower((string) $record->dkim_domain));
+                $selector = trim(strtolower((string) $record->dkim_selector));
+
+                if ($domain === '' || $selector === '') {
+                    return null;
+                }
+
+                return [
+                    'domain' => $domain,
+                    'selector' => $selector,
+                    'host' => $selector.'._domainkey.'.$domain,
+                ];
+            })
+            ->filter()
+            ->unique(fn (array $target) => $target['host'])
+            ->values();
+
+        $hosts = $domains
+            ->merge($domains->map(fn (string $domain) => '_dmarc.'.$domain))
+            ->merge($dkimTargets->pluck('host'))
+            ->unique()
+            ->values();
+
+        $snapshots = DmarcDnsRecordSnapshot::query()
+            ->where('user_id', $userId)
+            ->whereIn('host', $hosts)
+            ->get()
+            ->keyBy(fn (DmarcDnsRecordSnapshot $snapshot) => $snapshot->record_type.'|'.$snapshot->host);
+
+        $spf = $domains
+            ->map(fn (string $domain): array => $this->snapshotRow($this->snapshotFromCollection($snapshots, 'spf|'.$domain), $domain, $domain))
+            ->all();
+
+        $dmarc = $domains
+            ->map(fn (string $domain): array => $this->snapshotRow($this->snapshotFromCollection($snapshots, 'dmarc|'.'_dmarc.'.$domain), $domain, '_dmarc.'.$domain))
+            ->all();
+
+        $dkim = $dkimTargets
+            ->map(fn (array $target): array => $this->snapshotRow(
+                $this->snapshotFromCollection($snapshots, 'dkim|'.$target['host']),
+                $target['domain'],
+                $target['host'],
+                $target['selector']
+            ))
+            ->all();
+
+        return [
+            'spf' => $spf,
+            'dmarc' => $dmarc,
+            'dkim' => $dkim,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshotRow(?DmarcDnsRecordSnapshot $snapshot, string $domain, string $host, ?string $selector = null): array
+    {
+        return [
+            'domain' => $domain,
+            'host' => $host,
+            'selector' => $selector,
+            'status' => $snapshot?->status ?? 'not_collected',
+            'records' => array_values(array_map('strval', (array) ($snapshot?->records ?? []))),
+            'fetched_at' => $snapshot?->fetched_at,
+        ];
+    }
+
+    private function snapshotFromCollection(Collection $snapshots, string $key): ?DmarcDnsRecordSnapshot
+    {
+        $snapshot = $snapshots->get($key);
+
+        return $snapshot instanceof DmarcDnsRecordSnapshot ? $snapshot : null;
+    }
+}

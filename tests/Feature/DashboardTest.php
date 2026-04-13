@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcRecord;
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
@@ -406,6 +407,7 @@ class DashboardTest extends TestCase
     public function test_report_detail_page_shows_parsed_dkim_and_spf_domains_per_record(): void
     {
         $user = User::factory()->create();
+        $otherUser = User::factory()->create();
 
         $account = ImapAccount::query()->create([
             'user_id' => $user->id,
@@ -438,18 +440,72 @@ class DashboardTest extends TestCase
             'disposition' => 'none',
             'dkim' => 'pass',
             'dkim_domain' => 'mail.example.com',
+            'dkim_selector' => 's1',
             'spf' => 'pass',
             'spf_domain' => 'spf.example.net',
             'header_from' => 'example.com',
         ]);
 
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $user->id,
+            'record_type' => 'spf',
+            'domain' => 'example.com',
+            'host' => 'example.com',
+            'selector' => null,
+            'records' => ['v=spf1 include:_spf.example.net -all'],
+            'status' => 'found',
+            'fetched_at' => now(),
+        ]);
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $user->id,
+            'record_type' => 'dmarc',
+            'domain' => 'example.com',
+            'host' => '_dmarc.example.com',
+            'selector' => null,
+            'records' => ['v=DMARC1; p=reject; rua=mailto:dmarc@example.com'],
+            'status' => 'found',
+            'fetched_at' => now(),
+        ]);
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $user->id,
+            'record_type' => 'dkim',
+            'domain' => 'mail.example.com',
+            'host' => 's1._domainkey.mail.example.com',
+            'selector' => 's1',
+            'records' => ['v=DKIM1; p=ABC123'],
+            'status' => 'found',
+            'fetched_at' => now(),
+        ]);
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $otherUser->id,
+            'record_type' => 'spf',
+            'domain' => 'example.com',
+            'host' => 'example.com',
+            'selector' => null,
+            'records' => ['v=spf1 include:_spf.other-tenant.example -all'],
+            'status' => 'found',
+            'fetched_at' => now(),
+        ]);
+
         $this->actingAs($user)
             ->get(route('reports.show', $report))
             ->assertOk()
-            ->assertSee('DKIM result')
-            ->assertSee('mail.example.com')
+            ->assertSeeInOrder([
+                'DKIM result',
+                'Domain: mail.example.com',
+                'Selector: s1',
+                'SPF result',
+            ])
             ->assertSee('SPF result')
-            ->assertSee('spf.example.net');
+            ->assertSee('spf.example.net')
+            ->assertSee('Collected DNS records')
+            ->assertSee('v=spf1 include:_spf.example.net -all')
+            ->assertSee('v=DMARC1; p=reject; rua=mailto:dmarc@example.com')
+            ->assertSee('v=DKIM1; p=ABC123')
+            ->assertDontSee('v=spf1 include:_spf.other-tenant.example -all');
     }
 
     public function test_dashboard_message_trend_bars_link_to_reports_filtered_on_day(): void

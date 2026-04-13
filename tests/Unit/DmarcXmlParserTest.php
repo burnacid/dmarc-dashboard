@@ -41,6 +41,7 @@ class DmarcXmlParserTest extends TestCase
     <auth_results>
       <dkim>
         <domain>mail.example.com</domain>
+        <selector>s1</selector>
         <result>pass</result>
       </dkim>
       <spf>
@@ -65,6 +66,7 @@ XML;
         $this->assertSame(12, $parsed['records'][0]['message_count']);
         $this->assertSame('pass', $parsed['records'][0]['dkim']);
         $this->assertSame('mail.example.com', $parsed['records'][0]['dkim_domain']);
+        $this->assertSame('s1', $parsed['records'][0]['dkim_selector']);
         $this->assertSame('bounce.example.net', $parsed['records'][0]['spf_domain']);
     }
 

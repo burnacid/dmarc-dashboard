@@ -17,6 +17,7 @@ class DmarcRecord extends Model
         'disposition',
         'dkim',
         'dkim_domain',
+        'dkim_selector',
         'spf',
         'spf_domain',
         'header_from',

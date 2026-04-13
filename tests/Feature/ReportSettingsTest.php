@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DmarcAlertRule;
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
 use App\Models\User;
@@ -20,6 +21,15 @@ class ReportSettingsTest extends TestCase
             ->patch(route('profile.report-settings.update'), [
                 'report_retention_days' => 180,
                 'dashboard_range_presets' => ['7d', '30d', '180d'],
+                'alerts_spf_spike_enabled' => 1,
+                'alerts_spf_spike_domain' => 'Example.COM',
+                'alerts_spf_spike_threshold_multiplier' => 2.5,
+                'alerts_spf_spike_min_absolute_increase' => 10,
+                'alerts_spf_spike_min_messages' => 300,
+                'alerts_spf_spike_window_minutes' => 1440,
+                'alerts_spf_spike_baseline_days' => 21,
+                'alerts_spf_spike_cooldown_minutes' => 720,
+                'alerts_spf_spike_notification_email' => 'alerts@example.com',
             ])
             ->assertRedirect(route('profile.edit'));
 
@@ -27,6 +37,14 @@ class ReportSettingsTest extends TestCase
 
         $this->assertSame(180, $user->report_retention_days);
         $this->assertSame(['7d', '30d', '180d'], $user->dashboard_range_presets);
+
+        $rule = DmarcAlertRule::query()->where('user_id', $user->id)->first();
+        $this->assertNotNull($rule);
+        $this->assertSame('spf_fail_rate_spike', $rule->metric);
+        $this->assertTrue($rule->is_active);
+        $this->assertSame('example.com', $rule->domain);
+        $this->assertSame('alerts@example.com', $rule->notification_email);
+        $this->assertEquals(2.5, $rule->threshold_multiplier);
     }
 
     public function test_dashboard_uses_saved_range_presets(): void

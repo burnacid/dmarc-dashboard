@@ -12,6 +12,14 @@ Schedule::command('dmarc:poll')
     ->everyFifteenMinutes()
     ->withoutOverlapping();
 
+Schedule::command('dmarc:check-alerts')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping();
+
+Schedule::command('dmarc:collect-dns-records')
+    ->dailyAt('03:00')
+    ->withoutOverlapping();
+
 Schedule::command('dmarc:prune-reports')
     ->dailyAt('02:15')
     ->withoutOverlapping();
