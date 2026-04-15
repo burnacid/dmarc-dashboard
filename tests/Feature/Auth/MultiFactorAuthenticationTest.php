@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -35,6 +36,32 @@ class MultiFactorAuthenticationTest extends TestCase
         $response->assertRedirect(route('two-factor.challenge', absolute: false));
         $response->assertSessionHas('auth.two-factor', fn (array $state) => $state['user_id'] === $user->id);
         $this->assertGuest();
+    }
+
+    public function test_remember_me_is_preserved_through_two_factor_challenge(): void
+    {
+        $user = User::factory()->create();
+        $user->createTwoFactorAuth();
+        $user->confirmTwoFactorAuth($user->makeTwoFactorCode());
+
+        $loginResponse = $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+            'remember' => '1',
+        ]);
+
+        $loginResponse->assertRedirect(route('two-factor.challenge', absolute: false));
+        $loginResponse->assertSessionHas('auth.two-factor', fn (array $state) => $state['user_id'] === $user->id && ($state['remember'] ?? false) === true);
+
+        $this->travel(31)->seconds();
+
+        $challengeResponse = $this->post('/two-factor-challenge', [
+            'code' => $user->fresh()->makeTwoFactorCode(),
+        ]);
+
+        $this->assertAuthenticatedAs($user);
+        $challengeResponse->assertRedirect(route('dashboard', absolute: false));
+        $challengeResponse->assertCookie(Auth::guard('web')->getRecallerName());
     }
 
     public function test_users_can_complete_the_two_factor_challenge_after_password_login(): void

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Support\Auth\AuthDiagnostics;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -42,13 +43,27 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
+        AuthDiagnostics::log('password.attempt', $this, [
+            'email_hash' => AuthDiagnostics::emailHash($this->input('email')),
+        ]);
+
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+            AuthDiagnostics::log('password.failed', $this, [
+                'reason' => 'invalid_credentials',
+                'email_hash' => AuthDiagnostics::emailHash($this->input('email')),
+            ], 'warning');
+
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),
             ]);
         }
+
+        AuthDiagnostics::log('password.success', $this, [
+            'user_id' => Auth::id(),
+            'remember_requested' => $this->boolean('remember'),
+        ]);
 
         RateLimiter::clear($this->throttleKey());
     }
@@ -63,6 +78,11 @@ class LoginRequest extends FormRequest
         if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
             return;
         }
+
+        AuthDiagnostics::log('password.lockout', $this, [
+            'email_hash' => AuthDiagnostics::emailHash($this->input('email')),
+            'retry_after_seconds' => RateLimiter::availableIn($this->throttleKey()),
+        ], 'warning');
 
         event(new Lockout($this));
 

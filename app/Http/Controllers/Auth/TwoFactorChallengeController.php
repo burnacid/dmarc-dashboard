@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\Auth\AuthDiagnostics;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -33,6 +34,8 @@ class TwoFactorChallengeController extends Controller
     {
         abort_if(! config('app.totp_enabled', true), 404);
 
+        AuthDiagnostics::log('two_factor.challenge.store.start', $request);
+
         $request->merge([
             'code' => $this->resolveOtpCode($request),
         ]);
@@ -44,13 +47,28 @@ class TwoFactorChallengeController extends Controller
         $state = $request->session()->get('auth.two-factor');
         $user = $this->pendingUser($request);
 
+        AuthDiagnostics::log('two_factor.challenge.state', $request, [
+            'state_present' => (bool) $state,
+            'state_user_id' => is_array($state) ? ($state['user_id'] ?? null) : null,
+            'remember_from_state' => (bool) (is_array($state) ? ($state['remember'] ?? false) : false),
+            'pending_user_id' => $user?->getAuthIdentifier(),
+        ]);
+
         if (! $state || ! $user) {
             $request->session()->forget('auth.two-factor');
+
+            AuthDiagnostics::log('two_factor.challenge.redirect_login', $request, [
+                'reason' => 'missing_state_or_user',
+            ], 'warning');
 
             return redirect()->route('login');
         }
 
         if (! $user->validateTwoFactorCode($request->string('code')->toString())) {
+            AuthDiagnostics::log('two_factor.challenge.invalid_code', $request, [
+                'user_id' => $user->getAuthIdentifier(),
+            ], 'warning');
+
             throw ValidationException::withMessages([
                 'code' => __('The authentication code is invalid. You may also use a recovery code.'),
             ]);
@@ -60,6 +78,11 @@ class TwoFactorChallengeController extends Controller
 
         Auth::login($user, (bool) ($state['remember'] ?? false));
         $request->session()->regenerate();
+
+        AuthDiagnostics::log('two_factor.challenge.success', $request, [
+            'user_id' => $user->getAuthIdentifier(),
+            'remember_effective' => (bool) ($state['remember'] ?? false),
+        ]);
 
         return redirect()->intended(route('dashboard', absolute: false));
     }

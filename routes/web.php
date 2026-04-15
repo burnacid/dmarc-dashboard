@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\TwoFactorChallengeController;
+use App\Http\Controllers\AuthDiagnosticLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DmarcReportController;
 use App\Http\Controllers\DomainFilterController;
@@ -38,6 +39,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::patch('/profile/report-settings', [ReportSettingsController::class, 'update'])->name('profile.report-settings.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    Route::get('/auth-diagnostics', [AuthDiagnosticLogController::class, 'index'])->name('auth-diagnostics.index');
+    Route::get('/auth-diagnostics/{authDiagnosticLog}', [AuthDiagnosticLogController::class, 'show'])->name('auth-diagnostics.show');
+    Route::delete('/auth-diagnostics', [AuthDiagnosticLogController::class, 'destroy'])->name('auth-diagnostics.destroy');
 
     Route::prefix('security')->name('security.')->group(function () {
         Route::post('/two-factor', [SecurityController::class, 'storeTwoFactor'])->name('two-factor.store');

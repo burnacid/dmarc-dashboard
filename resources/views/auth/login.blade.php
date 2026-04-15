@@ -68,7 +68,7 @@
         <!-- Remember Me -->
         <div class="block mt-4">
             <label for="remember_me" class="inline-flex items-center">
-                <input id="remember_me" type="checkbox" class="rounded border-white/20 bg-slate-900 text-sky-400 focus:ring-sky-400" name="remember">
+                <input id="remember_me" type="checkbox" class="rounded border-white/20 bg-slate-900 text-sky-400 focus:ring-sky-400" name="remember" @checked(old('remember', true))>
                 <span class="ms-2 text-sm text-slate-300">{{ __('Remember me') }}</span>
             </label>
         </div>

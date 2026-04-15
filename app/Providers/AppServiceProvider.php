@@ -4,8 +4,15 @@ namespace App\Providers;
 
 use App\Services\Dns\NativeTxtRecordResolver;
 use App\Services\Dns\TxtRecordResolver;
+use App\Support\Auth\AuthDiagnostics;
+use Illuminate\Auth\Events\Attempting;
+use Illuminate\Auth\Events\Authenticated;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -24,6 +31,64 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Event::listen(Attempting::class, function (Attempting $event): void {
+            if (! app()->bound('request')) {
+                return;
+            }
+
+            AuthDiagnostics::log('event.attempting', request(), [
+                'guard' => $event->guard,
+                'remember_requested' => $event->remember,
+                'credential_keys' => array_values(array_diff(array_keys($event->credentials), ['password'])),
+            ]);
+        });
+
+        Event::listen(Failed::class, function (Failed $event): void {
+            if (! app()->bound('request')) {
+                return;
+            }
+
+            AuthDiagnostics::log('event.failed', request(), [
+                'guard' => $event->guard,
+                'user_id' => $event->user?->getAuthIdentifier(),
+                'credential_keys' => array_values(array_diff(array_keys($event->credentials), ['password'])),
+            ], 'warning');
+        });
+
+        Event::listen(Login::class, function (Login $event): void {
+            if (! app()->bound('request')) {
+                return;
+            }
+
+            AuthDiagnostics::log('event.login', request(), [
+                'guard' => $event->guard,
+                'user_id' => $event->user->getAuthIdentifier(),
+                'remember_effective' => $event->remember,
+            ]);
+        });
+
+        Event::listen(Authenticated::class, function (Authenticated $event): void {
+            if (! app()->bound('request')) {
+                return;
+            }
+
+            AuthDiagnostics::log('event.authenticated', request(), [
+                'guard' => $event->guard,
+                'user_id' => $event->user->getAuthIdentifier(),
+            ]);
+        });
+
+        Event::listen(Logout::class, function (Logout $event): void {
+            if (! app()->bound('request')) {
+                return;
+            }
+
+            AuthDiagnostics::log('event.logout', request(), [
+                'guard' => $event->guard,
+                'user_id' => $event->user?->getAuthIdentifier(),
+            ]);
+        });
+
         View::composer('layouts.navigation', function ($view): void {
             $user = Auth::user();
 

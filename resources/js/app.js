@@ -54,6 +54,7 @@ const bindPasskeyLogin = async () => {
 
 	const messageTarget = document.querySelector(button.dataset.messageTarget);
 	const emailInput = document.querySelector(button.dataset.emailInput);
+	const rememberInput = document.querySelector('#remember_me');
 
 	if (Webpass.isUnsupported()) {
 		setMessage(messageTarget, 'This browser or device does not support passkeys.', 'warning');
@@ -67,6 +68,7 @@ const bindPasskeyLogin = async () => {
 		setMessage(messageTarget, 'Waiting for your device to confirm the passkey…');
 
 		try {
+			const remember = Boolean(rememberInput?.checked);
 			const email = emailInput?.value?.trim();
 			const options = email
 				? {
@@ -74,8 +76,16 @@ const bindPasskeyLogin = async () => {
 					body: { email },
 				}
 				: '/webauthn/login/options';
+			const assertion = remember
+				? {
+					path: '/webauthn/login',
+					headers: {
+						'X-WebAuthn-Remember': '1',
+					},
+				}
+				: '/webauthn/login';
 
-			const { success, data, error } = await Webpass.assert(options, '/webauthn/login');
+			const { success, data, error } = await Webpass.assert(options, assertion);
 
 			if (! success) {
 				setMessage(messageTarget, normaliseError(error, 'Passkey sign in failed. Please try again.'), 'error');
