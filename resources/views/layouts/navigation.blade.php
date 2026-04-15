@@ -24,6 +24,11 @@
                 <a href="{{ route('profile.edit') }}" class="rounded-xl px-3 py-2 text-sm font-medium transition {{ request()->routeIs('profile.*') ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white' }}">
                     Profile
                 </a>
+                @if (config('app.auth_diagnostics_enabled'))
+                <a href="{{ route('auth-diagnostics.index') }}" class="rounded-xl px-3 py-2 text-sm font-medium transition {{ request()->routeIs('auth-diagnostics.*') ? 'bg-amber-400/20 text-amber-200' : 'text-amber-300/70 hover:bg-amber-400/10 hover:text-amber-200' }}">
+                    Auth Logs
+                </a>
+                @endif
             </div>
         </div>
 
@@ -65,6 +70,9 @@
                     <a href="{{ route('reports.index') }}" class="rounded-xl px-3 py-2 text-sm font-medium {{ request()->routeIs('reports.*') ? 'bg-white/10 text-white' : 'text-slate-300' }}">Reports</a>
                     <a href="{{ route('imap-accounts.index') }}" class="rounded-xl px-3 py-2 text-sm font-medium {{ request()->routeIs('imap-accounts.*') ? 'bg-white/10 text-white' : 'text-slate-300' }}">IMAP Accounts</a>
                     <a href="{{ route('profile.edit') }}" class="rounded-xl px-3 py-2 text-sm font-medium {{ request()->routeIs('profile.*') ? 'bg-white/10 text-white' : 'text-slate-300' }}">Profile</a>
+                    @if (config('app.auth_diagnostics_enabled'))
+                    <a href="{{ route('auth-diagnostics.index') }}" class="rounded-xl px-3 py-2 text-sm font-medium {{ request()->routeIs('auth-diagnostics.*') ? 'bg-amber-400/20 text-amber-200' : 'text-amber-300/70' }}">Auth Logs</a>
+                    @endif
                 </div>
 
                 <div class="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">

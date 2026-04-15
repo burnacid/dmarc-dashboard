@@ -139,4 +139,8 @@ return [
 
     'totp_enabled' => (bool) env('APP_TOTP_ENABLED', true),
 
+    'auth_diagnostics_enabled' => (bool) env('APP_AUTH_DIAGNOSTICS_ENABLED', false),
+
+    'auth_diagnostics_channel' => env('APP_AUTH_DIAGNOSTICS_CHANNEL', 'auth_diagnostics'),
+
 ];

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Support\Auth\AuthDiagnostics;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,6 +27,11 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+        AuthDiagnostics::log('password.store.after_authenticate', $request, [
+            'user_id' => Auth::id(),
+            'remember_requested' => $request->boolean('remember'),
+        ]);
+
         $user = $request->user();
 
         if (config('app.totp_enabled', true) && $user?->hasTwoFactorEnabled()) {
@@ -34,12 +40,22 @@ class AuthenticatedSessionController extends Controller
                 'remember' => $request->boolean('remember'),
             ]);
 
+            AuthDiagnostics::log('password.store.redirect_two_factor', $request, [
+                'user_id' => $user->getAuthIdentifier(),
+                'remember_requested' => $request->boolean('remember'),
+            ]);
+
             Auth::guard('web')->logout();
 
             return redirect()->route('two-factor.challenge');
         }
 
         $request->session()->regenerate();
+
+        AuthDiagnostics::log('password.store.redirect_dashboard', $request, [
+            'user_id' => $user?->getAuthIdentifier(),
+            'remember_requested' => $request->boolean('remember'),
+        ]);
 
         return redirect()->intended(route('dashboard', absolute: false));
     }

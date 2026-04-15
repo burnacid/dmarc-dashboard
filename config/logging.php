@@ -118,6 +118,13 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'auth_diagnostics' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/auth-diagnostics.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'replace_placeholders' => true,
+        ],
+
         'null' => [
             'driver' => 'monolog',
             'handler' => NullHandler::class,

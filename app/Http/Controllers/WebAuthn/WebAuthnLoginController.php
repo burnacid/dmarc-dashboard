@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\WebAuthn;
 
+use App\Support\Auth\AuthDiagnostics;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\JsonResponse;
 use Laragear\WebAuthn\Http\Requests\AssertedRequest;
@@ -18,6 +19,10 @@ class WebAuthnLoginController
     {
         abort_if(! config('app.passkeys_enabled', true), 404);
 
+        AuthDiagnostics::log('passkey.options', $request, [
+            'email_hash' => AuthDiagnostics::emailHash($request->input('email')),
+        ]);
+
         return $request->toVerify($request->validate(['email' => 'sometimes|email|string']));
     }
 
@@ -28,7 +33,17 @@ class WebAuthnLoginController
     {
         abort_if(! config('app.passkeys_enabled', true), 404);
 
+        AuthDiagnostics::log('passkey.login.attempt', $request, [
+            'remember_effective' => $request->hasRemember(),
+        ]);
+
         $user = $request->login();
+
+        AuthDiagnostics::log('passkey.login.result', $request, [
+            'success' => (bool) $user,
+            'user_id' => $user?->getAuthIdentifier(),
+            'remember_effective' => $request->hasRemember(),
+        ], $user ? 'info' : 'warning');
 
         return response()->json(
             $user
