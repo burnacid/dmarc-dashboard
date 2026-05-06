@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'ntfy' => [
+        'ca_bundle' => env('NTFY_CA_BUNDLE'),
+    ],
+
 ];
