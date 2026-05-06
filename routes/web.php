@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AlertController;
 use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\AuthDiagnosticLogController;
 use App\Http\Controllers\DashboardController;
@@ -40,6 +41,16 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::patch('/profile/report-settings', [ReportSettingsController::class, 'update'])->name('profile.report-settings.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    Route::get('/alerts', [AlertController::class, 'index'])->name('alerts.index');
+    Route::post('/alerts/rules', [AlertController::class, 'storeRule'])->name('alerts.rules.store');
+    Route::patch('/alerts/rules/{dmarcAlertRule}', [AlertController::class, 'updateRule'])->name('alerts.rules.update');
+    Route::delete('/alerts/rules/{dmarcAlertRule}', [AlertController::class, 'destroyRule'])->name('alerts.rules.destroy');
+    Route::get('/alerts/channels', [AlertController::class, 'channels'])->name('alerts.channels');
+    Route::post('/alerts/channels', [AlertController::class, 'storeChannel'])->name('alerts.channels.store');
+    Route::patch('/alerts/channels/{dmarcNotificationChannel}', [AlertController::class, 'updateChannel'])->name('alerts.channels.update');
+    Route::delete('/alerts/channels/{dmarcNotificationChannel}', [AlertController::class, 'destroyChannel'])->name('alerts.channels.destroy');
+    Route::post('/alerts/{dmarcAlertRule}/test-fire', [AlertController::class, 'testFire'])->name('alerts.test-fire');
 
     Route::middleware('can:view-admin-tools')->group(function () {
         Route::get('/auth-diagnostics', [AuthDiagnosticLogController::class, 'index'])->name('auth-diagnostics.index');

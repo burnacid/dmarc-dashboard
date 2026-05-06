@@ -10,7 +10,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class SpfFailRateSpikeNotification extends Notification
+class DkimFailRateSpikeNotification extends Notification
 {
     use Queueable;
 
@@ -33,11 +33,7 @@ class SpfFailRateSpikeNotification extends Notification
             return $this->target->isNtfy() ? [NtfyChannel::class] : ['mail'];
         }
 
-        $channels = [];
-
-        if (filled($this->rule->notification_email) || true) {
-            $channels[] = 'mail';
-        }
+        $channels = ['mail'];
 
         if (filled($this->rule->ntfy_url)) {
             $channels[] = NtfyChannel::class;
@@ -51,19 +47,19 @@ class SpfFailRateSpikeNotification extends Notification
         $domain = $this->rule->domain ?: 'All domains';
 
         return (new MailMessage)
-            ->subject('DMARC alert: SPF failure spike detected')
+            ->subject('DMARC alert: DKIM failure spike detected')
             ->greeting('DMARC alert')
             ->line("Domain scope: {$domain}")
             ->line(sprintf(
-                'Current SPF fail rate: %.2f%% (%d/%d messages)',
+                'Current DKIM fail rate: %.2f%% (%d/%d messages)',
                 (float) $this->payload['current_fail_rate'],
-                (int) $this->payload['current_spf_fail_messages'],
+                (int) $this->payload['current_dkim_fail_messages'],
                 (int) $this->payload['current_total_messages'],
             ))
             ->line(sprintf(
-                'Baseline SPF fail rate: %.2f%% (%d/%d messages)',
+                'Baseline DKIM fail rate: %.2f%% (%d/%d messages)',
                 (float) $this->payload['baseline_fail_rate'],
-                (int) $this->payload['baseline_spf_fail_messages'],
+                (int) $this->payload['baseline_dkim_fail_messages'],
                 (int) $this->payload['baseline_total_messages'],
             ))
             ->line(sprintf(
@@ -78,19 +74,19 @@ class SpfFailRateSpikeNotification extends Notification
         $domain = $this->rule->domain ?: 'All domains';
 
         $message = NtfyMessage::create(sprintf(
-            "**Domain:** `%s`\n\n**Current SPF fail rate:** `%.2f%%` (%d/%d)\n**Baseline SPF fail rate:** `%.2f%%` (%d/%d)\n**Increase:** `%.2f pp`\n\nReview the DMARC dashboard for details.",
+            "**Domain:** `%s`\n\n**Current DKIM fail rate:** `%.2f%%` (%d/%d)\n**Baseline DKIM fail rate:** `%.2f%%` (%d/%d)\n**Increase:** `%.2f pp`\n\nReview the DMARC dashboard for details.",
             $domain,
             (float) $this->payload['current_fail_rate'],
-            (int) $this->payload['current_spf_fail_messages'],
+            (int) $this->payload['current_dkim_fail_messages'],
             (int) $this->payload['current_total_messages'],
             (float) $this->payload['baseline_fail_rate'],
-            (int) $this->payload['baseline_spf_fail_messages'],
+            (int) $this->payload['baseline_dkim_fail_messages'],
             (int) $this->payload['baseline_total_messages'],
             (float) $this->payload['absolute_increase'],
         ))
-            ->title('DMARC alert: SPF failure spike detected')
+            ->title('DMARC alert: DKIM failure spike detected')
             ->priority(4)
-            ->tags(['warning', 'dmarc', 'spf']);
+            ->tags(['warning', 'dmarc', 'dkim']);
 
         $alertsUrl = rtrim((string) config('app.url'), '/');
 

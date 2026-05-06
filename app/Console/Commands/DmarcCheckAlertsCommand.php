@@ -3,26 +3,30 @@
 namespace App\Console\Commands;
 
 use App\Models\DmarcAlertRule;
-use App\Notifications\SpfFailRateSpikeNotification;
+use App\Services\Dmarc\DmarcAlertNotificationDispatcher;
+use App\Services\Dmarc\DkimFailRateSpikeAlertService;
 use App\Services\Dmarc\SpfFailRateSpikeAlertService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Log;
 
 #[Signature('dmarc:check-alerts')]
 #[Description('Evaluate DMARC alert rules and notify users when thresholds are crossed')]
 class DmarcCheckAlertsCommand extends Command
 {
-    public function handle(SpfFailRateSpikeAlertService $alertService): int
-    {
-        $now = now();
+    public function handle(
+        SpfFailRateSpikeAlertService $spfService,
+        DkimFailRateSpikeAlertService $dkimService,
+        DmarcAlertNotificationDispatcher $dispatcher,
+    ): int {
+        $now = \Carbon\Carbon::now();
 
         $rules = DmarcAlertRule::query()
-            ->with('user')
+            ->with(['user', 'notificationChannels'])
             ->where('is_active', true)
-            ->where('metric', 'spf_fail_rate_spike')
+            ->whereIn('metric', ['spf_fail_rate_spike', 'dkim_fail_rate_spike'])
             ->get();
 
         if ($rules->isEmpty()) {
@@ -38,32 +42,51 @@ class DmarcCheckAlertsCommand extends Command
                 continue;
             }
 
-            $payload = $alertService->evaluate($rule, $now);
+            $payload = match ($rule->metric) {
+                'dkim_fail_rate_spike' => $dkimService->evaluate($rule, $now),
+                default                => $spfService->evaluate($rule, $now),
+            };
 
             if ($payload === null) {
                 continue;
             }
 
-            $rule->events()->create([
-                'triggered_at' => $now,
-                'current_total_messages' => $payload['current_total_messages'],
-                'current_spf_fail_messages' => $payload['current_spf_fail_messages'],
-                'current_fail_rate' => $payload['current_fail_rate'],
-                'baseline_total_messages' => $payload['baseline_total_messages'],
-                'baseline_spf_fail_messages' => $payload['baseline_spf_fail_messages'],
-                'baseline_fail_rate' => $payload['baseline_fail_rate'],
+            // Persist event — DKIM fail messages stored in context for forward-compat
+            $eventData = [
+                'triggered_at'             => $now,
+                'current_total_messages'   => $payload['current_total_messages'],
+                'current_fail_rate'        => $payload['current_fail_rate'],
+                'baseline_total_messages'  => $payload['baseline_total_messages'],
+                'baseline_fail_rate'       => $payload['baseline_fail_rate'],
                 'context' => [
-                    'window_start' => $payload['window_start']->toIso8601String(),
-                    'window_end' => $payload['window_end']->toIso8601String(),
-                    'baseline_start' => $payload['baseline_start']->toIso8601String(),
-                    'baseline_end' => $payload['baseline_end']->toIso8601String(),
+                    'window_start'     => $payload['window_start']->toIso8601String(),
+                    'window_end'       => $payload['window_end']->toIso8601String(),
+                    'baseline_start'   => $payload['baseline_start']->toIso8601String(),
+                    'baseline_end'     => $payload['baseline_end']->toIso8601String(),
                     'absolute_increase' => $payload['absolute_increase'],
                 ],
-            ]);
+            ];
 
-            $recipient = filled($rule->notification_email) ? $rule->notification_email : $rule->user->email;
-            Notification::route('mail', $recipient)
-                ->notify(new SpfFailRateSpikeNotification($rule, $payload));
+            if ($rule->metric === 'dkim_fail_rate_spike') {
+                $eventData['current_spf_fail_messages']  = 0;
+                $eventData['baseline_spf_fail_messages'] = 0;
+                $eventData['context']['current_dkim_fail_messages']  = $payload['current_dkim_fail_messages'];
+                $eventData['context']['baseline_dkim_fail_messages'] = $payload['baseline_dkim_fail_messages'];
+            } else {
+                $eventData['current_spf_fail_messages']  = $payload['current_spf_fail_messages'];
+                $eventData['baseline_spf_fail_messages'] = $payload['baseline_spf_fail_messages'];
+            }
+
+            $rule->events()->create($eventData);
+
+            $dispatcher->dispatch($rule, $payload);
+
+            Log::channel('system')->info('dmarc.alert.triggered', [
+                'rule_id' => $rule->id,
+                'metric'  => $rule->metric,
+                'domain'  => $rule->domain,
+                'channel_count' => $rule->notificationChannels->count(),
+            ]);
 
             $triggeredCount++;
         }

@@ -89,4 +89,9 @@ class User extends Authenticatable implements TwoFactorAuthenticatable, WebAuthn
     {
         return $this->hasMany(DmarcAlertRule::class);
     }
+
+    public function dmarcNotificationChannels(): HasMany
+    {
+        return $this->hasMany(DmarcNotificationChannel::class);
+    }
 }
