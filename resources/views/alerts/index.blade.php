@@ -149,12 +149,30 @@
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-3">
-                        <x-text-input name="threshold_multiplier" type="number" step="0.01" min="1" max="20" class="mt-1 block w-full" :value="$rule->threshold_multiplier" />
-                        <x-text-input name="min_absolute_increase" type="number" step="0.01" min="0" max="100" class="mt-1 block w-full" :value="$rule->min_absolute_increase" />
-                        <x-text-input name="min_messages" type="number" min="1" max="10000000" class="mt-1 block w-full" :value="$rule->min_messages" />
-                        <x-text-input name="window_minutes" type="number" min="60" max="10080" class="mt-1 block w-full" :value="$rule->window_minutes" />
-                        <x-text-input name="baseline_days" type="number" min="1" max="90" class="mt-1 block w-full" :value="$rule->baseline_days" />
-                        <x-text-input name="cooldown_minutes" type="number" min="15" max="10080" class="mt-1 block w-full" :value="$rule->cooldown_minutes" />
+                        <div>
+                            <x-input-label :value="__('Spike multiplier')" />
+                            <x-text-input name="threshold_multiplier" type="number" step="0.01" min="1" max="20" class="mt-1 block w-full" :value="$rule->threshold_multiplier" />
+                        </div>
+                        <div>
+                            <x-input-label :value="__('Min increase (pp)')" />
+                            <x-text-input name="min_absolute_increase" type="number" step="0.01" min="0" max="100" class="mt-1 block w-full" :value="$rule->min_absolute_increase" />
+                        </div>
+                        <div>
+                            <x-input-label :value="__('Min messages')" />
+                            <x-text-input name="min_messages" type="number" min="1" max="10000000" class="mt-1 block w-full" :value="$rule->min_messages" />
+                        </div>
+                        <div>
+                            <x-input-label :value="__('Window minutes')" />
+                            <x-text-input name="window_minutes" type="number" min="60" max="10080" class="mt-1 block w-full" :value="$rule->window_minutes" />
+                        </div>
+                        <div>
+                            <x-input-label :value="__('Baseline days')" />
+                            <x-text-input name="baseline_days" type="number" min="1" max="90" class="mt-1 block w-full" :value="$rule->baseline_days" />
+                        </div>
+                        <div>
+                            <x-input-label :value="__('Cooldown minutes')" />
+                            <x-text-input name="cooldown_minutes" type="number" min="15" max="10080" class="mt-1 block w-full" :value="$rule->cooldown_minutes" />
+                        </div>
                     </div>
 
                     <div>
