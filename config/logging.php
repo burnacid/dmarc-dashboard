@@ -118,6 +118,12 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'database' => [
+            'driver' => 'custom',
+            'via' => App\Logging\DatabaseLoggerFactory::class,
+            'level' => env('LOG_LEVEL', 'debug'),
+        ],
+
         'auth_diagnostics' => [
             'driver' => 'single',
             'path' => storage_path('logs/auth-diagnostics.log'),

@@ -29,6 +29,11 @@
                     Auth Logs
                 </a>
                 @endif
+                @if (config('app.system_logs_ui_enabled'))
+                <a href="{{ route('system-logs.index') }}" class="rounded-xl px-3 py-2 text-sm font-medium transition {{ request()->routeIs('system-logs.*') ? 'bg-violet-400/20 text-violet-200' : 'text-violet-300/70 hover:bg-violet-400/10 hover:text-violet-200' }}">
+                    System Logs
+                </a>
+                @endif
             </div>
         </div>
 
@@ -72,6 +77,9 @@
                     <a href="{{ route('profile.edit') }}" class="rounded-xl px-3 py-2 text-sm font-medium {{ request()->routeIs('profile.*') ? 'bg-white/10 text-white' : 'text-slate-300' }}">Profile</a>
                     @if (config('app.auth_diagnostics_enabled'))
                     <a href="{{ route('auth-diagnostics.index') }}" class="rounded-xl px-3 py-2 text-sm font-medium {{ request()->routeIs('auth-diagnostics.*') ? 'bg-amber-400/20 text-amber-200' : 'text-amber-300/70' }}">Auth Logs</a>
+                    @endif
+                    @if (config('app.system_logs_ui_enabled'))
+                    <a href="{{ route('system-logs.index') }}" class="rounded-xl px-3 py-2 text-sm font-medium {{ request()->routeIs('system-logs.*') ? 'bg-violet-400/20 text-violet-200' : 'text-violet-300/70' }}">System Logs</a>
                     @endif
                 </div>
 

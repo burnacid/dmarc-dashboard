@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use App\Services\Dns\NativeTxtRecordResolver;
 use App\Services\Dns\TxtRecordResolver;
 use App\Support\Auth\AuthDiagnostics;
@@ -13,6 +14,7 @@ use Illuminate\Auth\Events\Logout;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -31,6 +33,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::define('view-admin-tools', static function (User $user): bool {
+            return $user->isAdmin();
+        });
+
         Event::listen(Attempting::class, function (Attempting $event): void {
             if (! app()->bound('request')) {
                 return;
@@ -89,7 +95,7 @@ class AppServiceProvider extends ServiceProvider
             ]);
         });
 
-        View::composer('layouts.navigation', function ($view): void {
+        View::composer(['layouts.sidebar', 'layouts.navigation'], function ($view): void {
             $user = Auth::user();
 
             if (! $user) {

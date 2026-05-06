@@ -15,7 +15,7 @@ use Laragear\TwoFactor\TwoFactorAuthentication;
 use Laragear\WebAuthn\Contracts\WebAuthnAuthenticatable;
 use Laragear\WebAuthn\WebAuthnAuthentication;
 
-#[Fillable(['name', 'email', 'password', 'report_retention_days', 'dashboard_range_presets'])]
+#[Fillable(['name', 'email', 'password', 'is_admin', 'report_retention_days', 'dashboard_range_presets'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements TwoFactorAuthenticatable, WebAuthnAuthenticatable
 {
@@ -32,8 +32,20 @@ class User extends Authenticatable implements TwoFactorAuthenticatable, WebAuthn
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_admin' => 'boolean',
             'dashboard_range_presets' => 'array',
         ];
+    }
+
+    public function isAdmin(): bool
+    {
+        if ((bool) $this->is_admin) {
+            return true;
+        }
+
+        $adminEmails = array_map('strtolower', (array) config('app.admin_emails', []));
+
+        return in_array(strtolower((string) $this->email), $adminEmails, true);
     }
 
     /**
