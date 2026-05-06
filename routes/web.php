@@ -9,6 +9,7 @@ use App\Http\Controllers\ImapAccountController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportSettingsController;
 use App\Http\Controllers\SecurityController;
+use App\Http\Controllers\SystemLogController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 use Laragear\WebAuthn\Http\Routes as WebAuthnRoutes;
@@ -40,9 +41,15 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile/report-settings', [ReportSettingsController::class, 'update'])->name('profile.report-settings.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    Route::get('/auth-diagnostics', [AuthDiagnosticLogController::class, 'index'])->name('auth-diagnostics.index');
-    Route::get('/auth-diagnostics/{authDiagnosticLog}', [AuthDiagnosticLogController::class, 'show'])->name('auth-diagnostics.show');
-    Route::delete('/auth-diagnostics', [AuthDiagnosticLogController::class, 'destroy'])->name('auth-diagnostics.destroy');
+    Route::middleware('can:view-admin-tools')->group(function () {
+        Route::get('/auth-diagnostics', [AuthDiagnosticLogController::class, 'index'])->name('auth-diagnostics.index');
+        Route::get('/auth-diagnostics/{authDiagnosticLog}', [AuthDiagnosticLogController::class, 'show'])->name('auth-diagnostics.show');
+        Route::delete('/auth-diagnostics', [AuthDiagnosticLogController::class, 'destroy'])->name('auth-diagnostics.destroy');
+
+        Route::get('/system-logs', [SystemLogController::class, 'index'])->name('system-logs.index');
+        Route::get('/system-logs/{systemLog}', [SystemLogController::class, 'show'])->name('system-logs.show');
+        Route::delete('/system-logs', [SystemLogController::class, 'destroy'])->name('system-logs.destroy');
+    });
 
     Route::prefix('security')->name('security.')->group(function () {
         Route::post('/two-factor', [SecurityController::class, 'storeTwoFactor'])->name('two-factor.store');

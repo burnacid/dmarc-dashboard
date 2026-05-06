@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\AuthDiagnosticLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 class AuthDiagnosticLogController extends Controller
 {
     public function index(Request $request): View
     {
+        $this->ensureAdminToolsAccess();
+
         $filters = [
             'event'  => $request->input('event', ''),
             'level'  => $request->input('level', ''),
@@ -47,6 +50,8 @@ class AuthDiagnosticLogController extends Controller
 
     public function show(AuthDiagnosticLog $authDiagnosticLog): View
     {
+        $this->ensureAdminToolsAccess();
+
         $keyFingerprint = substr(hash('sha256', (string) config('app.key')), 0, 16);
 
         return view('auth-diagnostics.show', [
@@ -57,6 +62,8 @@ class AuthDiagnosticLogController extends Controller
 
     public function destroy(Request $request): RedirectResponse
     {
+        $this->ensureAdminToolsAccess();
+
         $request->validate([
             'confirm' => ['required', 'in:DELETE'],
         ]);
@@ -65,6 +72,11 @@ class AuthDiagnosticLogController extends Controller
 
         return redirect()->route('auth-diagnostics.index')
             ->with('status', 'All auth diagnostic logs cleared.');
+    }
+
+    private function ensureAdminToolsAccess(): void
+    {
+        abort_unless(Gate::allows('view-admin-tools'), 403);
     }
 }
 

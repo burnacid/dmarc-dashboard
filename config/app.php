@@ -143,4 +143,13 @@ return [
 
     'auth_diagnostics_channel' => env('APP_AUTH_DIAGNOSTICS_CHANNEL', 'auth_diagnostics'),
 
+    'admin_emails' => array_values(array_filter(array_map(
+        static fn (string $email): string => strtolower(trim($email)),
+        explode(',', (string) env('APP_ADMIN_EMAILS', ''))
+    ))),
+
+    'system_logs_ui_enabled' => (bool) env('APP_SYSTEM_LOGS_UI_ENABLED', false),
+
+    'system_logs_retention_days' => (int) env('APP_SYSTEM_LOGS_RETENTION_DAYS', 30),
+
 ];

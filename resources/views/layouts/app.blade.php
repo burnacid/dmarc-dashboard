@@ -14,30 +14,32 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="min-h-screen bg-slate-950 font-sans text-slate-100 antialiased">
-        <div class="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_right,_rgba(14,165,233,0.18),_transparent_30%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)]">
-            @include('layouts.navigation')
+        <div class="min-h-screen bg-[radial-gradient(circle_at_top_right,_rgba(14,165,233,0.18),_transparent_30%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)]">
+            @include('layouts.sidebar')
 
-            @isset($header)
-                <header class="border-b border-white/10 bg-slate-950/40 backdrop-blur">
-                    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
-                        <div>
-                            {{ $header }}
+            <div class="flex min-h-screen flex-1 flex-col md:pl-72">
+                @isset($header)
+                    <header class="border-b border-white/10 bg-slate-950/40 backdrop-blur">
+                        <div class="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
+                            <div>
+                                {{ $header }}
+                            </div>
                         </div>
-                    </div>
-                </header>
-            @endisset
+                    </header>
+                @endisset
 
-            <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
-                @if (session('status'))
-                    <div class="mb-6 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
-                        {{ session('status') }}
-                    </div>
-                @endif
+                <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
+                    @if (session('status'))
+                        <div class="mb-6 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+                            {{ session('status') }}
+                        </div>
+                    @endif
 
-                {{ $slot }}
-            </main>
+                    {{ $slot }}
+                </main>
 
-            @include('layouts.footer')
+                @include('layouts.footer')
+            </div>
         </div>
     </body>
 </html>
