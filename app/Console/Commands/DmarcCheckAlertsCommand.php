@@ -6,10 +6,10 @@ use App\Models\DmarcAlertRule;
 use App\Services\Dmarc\DmarcAlertNotificationDispatcher;
 use App\Services\Dmarc\DkimFailRateSpikeAlertService;
 use App\Services\Dmarc\SpfFailRateSpikeAlertService;
+use Carbon\Carbon;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
 #[Signature('dmarc:check-alerts')]
@@ -21,7 +21,7 @@ class DmarcCheckAlertsCommand extends Command
         DkimFailRateSpikeAlertService $dkimService,
         DmarcAlertNotificationDispatcher $dispatcher,
     ): int {
-        $now = \Carbon\Carbon::now();
+        $now = Carbon::now();
 
         $rules = DmarcAlertRule::query()
             ->with(['user', 'notificationChannels'])
