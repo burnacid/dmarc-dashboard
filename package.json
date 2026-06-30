@@ -19,6 +19,7 @@
         "vite": "^8.0.0"
     },
     "dependencies": {
-        "@laragear/webpass": "^2.1.2"
+        "@laragear/webpass": "^2.1.2",
+        "chart.js": "^4.5.1"
     }
 }

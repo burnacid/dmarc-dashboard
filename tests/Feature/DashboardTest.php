@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DmarcAlertRule;
 use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcRecord;
 use App\Models\DmarcReport;
@@ -660,5 +661,217 @@ class DashboardTest extends TestCase
             ->assertSee('Target Sender')
             ->assertDontSee('Other Domain Sender')
             ->assertDontSee('Other Day Sender');
+    }
+
+    public function test_dashboard_shows_recent_alert_events(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $rule = DmarcAlertRule::query()->create([
+            'user_id' => $user->id,
+            'name' => 'SPF spike on mail.example.com',
+            'domain' => 'mail.example.com',
+        ]);
+
+        $rule->events()->create([
+            'triggered_at' => now(),
+            'current_total_messages' => 100,
+            'current_spf_fail_messages' => 40,
+            'current_fail_rate' => 40.0,
+            'baseline_total_messages' => 100,
+            'baseline_spf_fail_messages' => 5,
+            'baseline_fail_rate' => 5.0,
+        ]);
+
+        $otherRule = DmarcAlertRule::query()->create([
+            'user_id' => $otherUser->id,
+            'name' => 'Other tenant alert rule',
+            'domain' => 'other-tenant.example',
+        ]);
+
+        $otherRule->events()->create([
+            'triggered_at' => now(),
+            'current_total_messages' => 50,
+            'current_spf_fail_messages' => 30,
+            'current_fail_rate' => 60.0,
+            'baseline_total_messages' => 50,
+            'baseline_spf_fail_messages' => 2,
+            'baseline_fail_rate' => 4.0,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Recent alert events')
+            ->assertSee('SPF spike on mail.example.com')
+            ->assertDontSee('Other tenant alert rule');
+    }
+
+    public function test_dashboard_shows_dns_record_health(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $user->id,
+            'record_type' => 'spf',
+            'domain' => 'own-domain.example',
+            'host' => 'own-domain.example',
+            'selector' => null,
+            'records' => ['v=spf1 -all'],
+            'status' => 'found',
+            'fetched_at' => now(),
+        ]);
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $user->id,
+            'record_type' => 'dmarc',
+            'domain' => 'own-domain.example',
+            'host' => '_dmarc.own-domain.example',
+            'selector' => null,
+            'records' => [],
+            'status' => 'not_found',
+            'fetched_at' => now(),
+        ]);
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $user->id,
+            'record_type' => 'dkim',
+            'domain' => 'own-domain.example',
+            'host' => 's1._domainkey.own-domain.example',
+            'selector' => 's1',
+            'records' => [],
+            'status' => 'error',
+            'error' => 'DNS timeout',
+            'fetched_at' => now(),
+        ]);
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $otherUser->id,
+            'record_type' => 'spf',
+            'domain' => 'other-tenant-only.example',
+            'host' => 'other-tenant-only.example',
+            'selector' => null,
+            'records' => ['v=spf1 -all'],
+            'status' => 'found',
+            'fetched_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('DNS record health')
+            ->assertSee('own-domain.example')
+            ->assertSee('not found')
+            ->assertSee('error')
+            ->assertDontSee('other-tenant-only.example');
+    }
+
+    public function test_dashboard_shows_trend_and_disposition_chart_containers(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('id="trend-chart"', false)
+            ->assertSee('id="disposition-chart"', false)
+            ->assertSee('id="dashboard-trend-data"', false)
+            ->assertSee('id="dashboard-disposition-data"', false);
+    }
+
+    public function test_dashboard_shows_period_over_period_deltas(): void
+    {
+        $user = User::factory()->create();
+
+        $account = ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $currentReport = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'delta-current-report',
+            'org_name' => 'Delta Current Sender',
+            'email' => 'delta-current@example.com',
+            'report_begin_at' => now()->subDays(6),
+            'report_end_at' => now()->subDays(5),
+            'policy_domain' => 'delta.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        $previousReport = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'delta-previous-report',
+            'org_name' => 'Delta Previous Sender',
+            'email' => 'delta-previous@example.com',
+            'report_begin_at' => now()->subDays(46),
+            'report_end_at' => now()->subDays(45),
+            'policy_domain' => 'delta.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $currentReport->id,
+            'source_ip' => '203.0.113.70',
+            'message_count' => 2,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'delta.example',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $previousReport->id,
+            'source_ip' => '203.0.113.71',
+            'message_count' => 1,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'delta.example',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('100.0% messages vs previous 30 days');
+    }
+
+    public function test_dashboard_live_stats_endpoint_returns_json(): void
+    {
+        $user = User::factory()->create();
+
+        ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('dashboard.live-stats'))
+            ->assertOk()
+            ->assertJsonStructure(['total_accounts', 'active_accounts', 'total_reports', 'last_polled_at', 'generated_at']);
+    }
+
+    public function test_dashboard_live_stats_requires_authentication(): void
+    {
+        $this->getJson(route('dashboard.live-stats'))
+            ->assertUnauthorized();
     }
 }

@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DmarcAlertEvent;
+use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcRecord;
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
 use App\Models\User;
 use App\Services\Dmarc\DmarcIngestionService;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -131,7 +134,7 @@ class DashboardController extends Controller
             'disposition_other' => $recordRows->filter(fn ($row) => ! in_array(strtolower((string) $row->disposition), ['none', 'quarantine', 'reject'], true))->sum('message_count'),
         ];
 
-        $timeSeries = $this->buildTimeSeries($recordRows, $range['start']->copy(), $range['end']->copy());
+        $timeSeries = $this->buildTimeSeries($recordRows, $range['start']->copy(), $range['end']->copy(), $selectedDomain);
 
         $failureSummary = collect([
             'all' => $recordRows->filter(fn ($row) => $this->isFailureRow($row))->sum('message_count'),
@@ -140,6 +143,17 @@ class DashboardController extends Controller
             'quarantine' => $recordRows->filter(fn ($row) => strtolower((string) $row->disposition) === 'quarantine')->sum('message_count'),
             'reject' => $recordRows->filter(fn ($row) => strtolower((string) $row->disposition) === 'reject')->sum('message_count'),
         ]);
+
+        $deltas = $this->buildDeltas($user->id, $range, $selectedDomain, $recordRows->sum('message_count'), (int) $failureSummary['all']);
+
+        $recentAlertEvents = DmarcAlertEvent::query()
+            ->whereHas('rule', fn ($query) => $query->where('user_id', $user->id))
+            ->with('rule:id,name,metric,domain')
+            ->latest('triggered_at')
+            ->limit(5)
+            ->get();
+
+        $dnsHealth = $this->buildDnsHealthSummary($user->id);
 
         $focusedFailures = $recordRows
             ->filter(fn ($row) => $this->matchesFocus($row, $focus))
@@ -173,14 +187,21 @@ class DashboardController extends Controller
             'selectedDomain' => $selectedDomain,
             'failureSummary' => $failureSummary,
             'focusedFailures' => $focusedFailures,
-            'stats' => [
-                'total_accounts' => $accounts->count(),
-                'active_accounts' => $accounts->where('is_active', true)->count(),
-                'total_reports' => DmarcReport::query()
-                    ->whereHas('account', fn ($query) => $query->where('user_id', $user->id))
-                    ->count(),
-                'last_polled_at' => $this->latestPoll($accounts),
-            ],
+            'deltas' => $deltas,
+            'recentAlertEvents' => $recentAlertEvents,
+            'dnsHealth' => $dnsHealth,
+            'stats' => $this->buildHeadlineStats($accounts, $user),
+        ]);
+    }
+
+    public function liveStats(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $accounts = $user->imapAccounts()->withCount('reports')->get();
+
+        return response()->json([
+            ...$this->buildHeadlineStats($accounts, $user),
+            'generated_at' => now()->toIso8601String(),
         ]);
     }
 
@@ -236,6 +257,83 @@ class DashboardController extends Controller
             'report' => $dmarcReport,
             'formattedXml' => trim($dmarcReport->raw_xml),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildHeadlineStats(Collection $accounts, User $user): array
+    {
+        return [
+            'total_accounts' => $accounts->count(),
+            'active_accounts' => $accounts->where('is_active', true)->count(),
+            'total_reports' => DmarcReport::query()
+                ->whereHas('account', fn ($query) => $query->where('user_id', $user->id))
+                ->count(),
+            'last_polled_at' => $this->latestPoll($accounts),
+        ];
+    }
+
+    /**
+     * @return array{total_messages: ?float, failed_messages: ?float}
+     */
+    private function buildDeltas(int $userId, array $range, string $selectedDomain, int $currentTotalMessages, int $currentFailedMessages): array
+    {
+        $previousStart = $range['start']->copy()->subDays($range['days'])->startOfDay();
+        $previousEnd = $range['start']->copy()->subDay()->endOfDay();
+
+        $previousRecordRows = DmarcRecord::query()
+            ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+            ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
+            ->where('imap_accounts.user_id', $userId)
+            ->when(
+                $selectedDomain !== '',
+                fn ($query) => $query->where(function ($domainQuery) use ($selectedDomain): void {
+                    $domainQuery
+                        ->where('dmarc_records.header_from', $selectedDomain)
+                        ->orWhere(function ($fallbackQuery) use ($selectedDomain): void {
+                            $fallbackQuery
+                                ->where(function ($emptyHeader): void {
+                                    $emptyHeader
+                                        ->whereNull('dmarc_records.header_from')
+                                        ->orWhere('dmarc_records.header_from', '');
+                                })
+                                ->where('dmarc_reports.policy_domain', $selectedDomain);
+                        });
+                })
+            )
+            ->whereRaw('COALESCE(dmarc_reports.report_end_at, dmarc_reports.created_at) BETWEEN ? AND ?', [$previousStart, $previousEnd])
+            ->select(['dmarc_records.message_count', 'dmarc_records.dkim', 'dmarc_records.spf', 'dmarc_records.disposition'])
+            ->get();
+
+        $previousTotalMessages = (int) $previousRecordRows->sum('message_count');
+        $previousFailedMessages = (int) $previousRecordRows->filter(fn ($row) => $this->isFailureRow($row))->sum('message_count');
+
+        return [
+            'total_messages' => $this->percentDelta($currentTotalMessages, $previousTotalMessages),
+            'failed_messages' => $this->percentDelta($currentFailedMessages, $previousFailedMessages),
+        ];
+    }
+
+    private function percentDelta(int $current, int $previous): ?float
+    {
+        if ($previous === 0) {
+            return $current > 0 ? 100.0 : null;
+        }
+
+        return round((($current - $previous) / $previous) * 100, 1);
+    }
+
+    private function buildDnsHealthSummary(int $userId): Collection
+    {
+        return DmarcDnsRecordSnapshot::query()
+            ->where('user_id', $userId)
+            ->select(['record_type', 'domain', 'host', 'selector', 'status', 'fetched_at'])
+            ->get()
+            ->groupBy(fn ($row) => $row->record_type.'|'.$row->domain.'|'.$row->host)
+            ->map(fn (Collection $rows) => $rows->sortByDesc('fetched_at')->first())
+            ->sortBy(fn ($row) => $row->domain.'|'.$row->record_type)
+            ->values();
     }
 
     private function latestPoll(Collection $accounts): ?string
@@ -382,7 +480,7 @@ class DashboardController extends Controller
         return array_key_exists($focus, $this->focusOptions()) ? $focus : 'all';
     }
 
-    private function buildTimeSeries(Collection $recordRows, Carbon $start, Carbon $end): Collection
+    private function buildTimeSeries(Collection $recordRows, Carbon $start, Carbon $end, string $selectedDomain = ''): Collection
     {
         $buckets = collect();
         $cursor = $start->copy();
@@ -395,6 +493,12 @@ class DashboardController extends Controller
                 'total_messages' => 0,
                 'failed_messages' => 0,
                 'passed_messages' => 0,
+                'report_url' => route('reports.index', array_filter([
+                    'range' => 'custom',
+                    'from' => $key,
+                    'to' => $key,
+                    'domain' => $selectedDomain,
+                ], fn ($value) => $value !== '')),
             ]);
 
             $cursor->addDay();

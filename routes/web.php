@@ -34,6 +34,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('/dashboard/poll-now', [DashboardController::class, 'pollNow'])->name('dashboard.poll-now');
+    Route::get('/dashboard/live-stats', [DashboardController::class, 'liveStats'])->name('dashboard.live-stats');
     Route::get('/reports', [DmarcReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/{dmarcReport}', [DmarcReportController::class, 'show'])->name('reports.show');
     Route::resource('imap-accounts', ImapAccountController::class)->except(['show']);
