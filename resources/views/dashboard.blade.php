@@ -1,4 +1,6 @@
 <x-app-layout>
+    @vite(['resources/js/dashboard.js'])
+
     <x-slot name="header">
         <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
@@ -14,22 +16,37 @@
     </x-slot>
 
     <div class="flex flex-col gap-6">
-        <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section
+            id="dashboard-live-stats"
+            class="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+            data-url="{{ route('dashboard.live-stats') }}"
+            data-poll-interval="30000"
+        >
             <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
                 <p class="text-sm text-slate-400">Configured accounts</p>
-                <p class="mt-3 text-3xl font-semibold text-white">{{ $stats['total_accounts'] }}</p>
+                <p class="mt-3 text-3xl font-semibold text-white" id="stat-total-accounts">{{ $stats['total_accounts'] }}</p>
             </div>
             <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
                 <p class="text-sm text-slate-400">Active accounts</p>
-                <p class="mt-3 text-3xl font-semibold text-white">{{ $stats['active_accounts'] }}</p>
+                <p class="mt-3 text-3xl font-semibold text-white" id="stat-active-accounts">{{ $stats['active_accounts'] }}</p>
+                @if (($deltas['failed_messages'] ?? null) !== null)
+                    <p class="mt-1 text-xs {{ $deltas['failed_messages'] <= 0 ? 'text-emerald-300' : 'text-rose-300' }}">
+                        {{ $deltas['failed_messages'] <= 0 ? '↓' : '↑' }} {{ number_format(abs($deltas['failed_messages']), 1) }}% failed messages vs previous {{ strtolower($range['label']) }}
+                    </p>
+                @endif
             </div>
             <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
                 <p class="text-sm text-slate-400">Imported reports</p>
-                <p class="mt-3 text-3xl font-semibold text-white">{{ $stats['total_reports'] }}</p>
+                <p class="mt-3 text-3xl font-semibold text-white" id="stat-total-reports">{{ $stats['total_reports'] }}</p>
+                @if (($deltas['total_messages'] ?? null) !== null)
+                    <p class="mt-1 text-xs {{ $deltas['total_messages'] >= 0 ? 'text-emerald-300' : 'text-rose-300' }}">
+                        {{ $deltas['total_messages'] >= 0 ? '↑' : '↓' }} {{ number_format(abs($deltas['total_messages']), 1) }}% messages vs previous {{ strtolower($range['label']) }}
+                    </p>
+                @endif
             </div>
             <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
                 <p class="text-sm text-slate-400">Last poll</p>
-                <p class="mt-3 text-xl font-semibold text-white">{{ $stats['last_polled_at'] ?? 'Never polled' }}</p>
+                <p class="mt-3 text-xl font-semibold text-white" id="stat-last-poll">{{ $stats['last_polled_at'] ?? 'Never polled' }}</p>
             </div>
         </section>
 
@@ -85,47 +102,31 @@
             </form>
 
             @php
-                $trendMax = max(1, (int) ($timeSeries->max('total_messages') ?? 1));
+                $trendChartData = $timeSeries->map(fn ($point) => [
+                    'label' => $point->label,
+                    'key' => $point->key,
+                    'total' => $point->total_messages,
+                    'failed' => $point->failed_messages,
+                    'reportUrl' => $point->report_url,
+                ]);
             @endphp
+            <script type="application/json" id="dashboard-trend-data">{!! json_encode($trendChartData) !!}</script>
 
-            <div class="mt-6 overflow-x-auto">
-                <div class="flex min-w-[760px] items-end gap-3">
-                    @foreach ($timeSeries as $point)
-                        @php
-                            $totalHeight = max(6, (int) round(($point->total_messages / $trendMax) * 220));
-                            $failHeight = $point->total_messages > 0
-                                ? max(4, (int) round(($point->failed_messages / $trendMax) * 220))
-                                : 0;
-                            $reportLink = route('reports.index', array_filter([
-                                'range' => 'custom',
-                                'from' => $point->key,
-                                'to' => $point->key,
-                                'domain' => $selectedDomain,
-                            ], fn ($value) => $value !== ''));
-                        @endphp
-                        <div class="flex w-full min-w-[18px] flex-1 flex-col items-center gap-2">
-                            <div class="text-[10px] text-slate-500">{{ number_format($point->total_messages) }}</div>
-                            <a
-                                href="{{ $reportLink }}"
-                                class="relative flex h-[220px] w-full items-end justify-center rounded-t-2xl bg-white/5 px-1 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-                                aria-label="View reports for {{ $point->key }}"
-                                title="View reports for {{ $point->key }}"
-                            >
-                                <div class="w-full rounded-t-xl bg-sky-400/35" style="height: {{ $totalHeight }}px"></div>
-                                @if ($point->failed_messages > 0)
-                                    <div class="absolute bottom-0 w-[70%] rounded-t-xl bg-rose-400" style="height: {{ $failHeight }}px"></div>
-                                @endif
-                            </a>
-                            <div class="text-center text-[10px] text-slate-400 tabular-nums">{{ $point->label }}</div>
-                        </div>
-                    @endforeach
-                </div>
+            <div class="mt-6">
+                <canvas id="trend-chart" height="90"></canvas>
+            </div>
+
+            {{-- Preserves day-level drill-down links for tests and no-JS fallback; the chart above provides the visual + onClick navigation. --}}
+            <div class="sr-only" aria-hidden="true">
+                @foreach ($timeSeries as $point)
+                    <a href="{{ $point->report_url }}" aria-label="View reports for {{ $point->key }}" title="View reports for {{ $point->key }}">{{ $point->label }}</a>
+                @endforeach
             </div>
 
             <div class="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-400">
                 <div class="flex items-center gap-2"><span class="h-3 w-3 rounded-full bg-sky-400/35"></span> Total messages</div>
                 <div class="flex items-center gap-2"><span class="h-3 w-3 rounded-full bg-rose-400"></span> Failed messages</div>
-                <div class="text-slate-500">Tip: click a bar to open reports for that day.</div>
+                <div class="text-slate-500">Tip: click a point to open reports for that day.</div>
             </div>
         </section>
 
@@ -186,7 +187,6 @@
                     $dispositionReject = (int) ($resultSummary->disposition_reject ?? 0);
                     $dispositionOther = (int) ($resultSummary->disposition_other ?? 0);
                     $authMax = max(1, $dkimPass, $dkimFail, $spfPass, $spfFail);
-                    $dispositionTotal = max(1, $dispositionNone + $dispositionQuarantine + $dispositionReject + $dispositionOther);
                 @endphp
 
                 <div class="mt-5 space-y-4">
@@ -209,19 +209,28 @@
                     @endforeach
                 </div>
 
+                @php
+                    $dispositionChartData = [
+                        'none' => $dispositionNone,
+                        'quarantine' => $dispositionQuarantine,
+                        'reject' => $dispositionReject,
+                        'other' => $dispositionOther,
+                    ];
+                @endphp
+                <script type="application/json" id="dashboard-disposition-data">{!! json_encode($dispositionChartData) !!}</script>
+
                 <div class="mt-6 border-t border-white/10 pt-5">
                     <p class="text-sm font-medium text-slate-200">Policy disposition split</p>
-                    <div class="mt-3 flex h-3 overflow-hidden rounded-full bg-white/10">
-                        <div class="bg-sky-400" style="width: {{ ($dispositionNone / $dispositionTotal) * 100 }}%"></div>
-                        <div class="bg-amber-400" style="width: {{ ($dispositionQuarantine / $dispositionTotal) * 100 }}%"></div>
-                        <div class="bg-rose-400" style="width: {{ ($dispositionReject / $dispositionTotal) * 100 }}%"></div>
-                        <div class="bg-slate-500" style="width: {{ ($dispositionOther / $dispositionTotal) * 100 }}%"></div>
-                    </div>
-                    <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-300">
-                        <p>None: {{ number_format($dispositionNone) }}</p>
-                        <p>Quarantine: {{ number_format($dispositionQuarantine) }}</p>
-                        <p>Reject: {{ number_format($dispositionReject) }}</p>
-                        <p>Other: {{ number_format($dispositionOther) }}</p>
+                    <div class="mt-3 flex items-center gap-6">
+                        <div class="h-32 w-32 shrink-0">
+                            <canvas id="disposition-chart"></canvas>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
+                            <p>None: {{ number_format($dispositionNone) }}</p>
+                            <p>Quarantine: {{ number_format($dispositionQuarantine) }}</p>
+                            <p>Reject: {{ number_format($dispositionReject) }}</p>
+                            <p>Other: {{ number_format($dispositionOther) }}</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -388,6 +397,80 @@
                         @endforelse
                     </div>
                 </div>
+
+                <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">Recent alert events</h2>
+                            <p class="mt-1 text-sm text-slate-400">Latest triggered alert rules across all domains.</p>
+                        </div>
+                        <a href="{{ route('alerts.index') }}" class="text-sm font-medium text-sky-300 hover:text-sky-200">Manage alerts</a>
+                    </div>
+
+                    <div class="mt-5 space-y-3">
+                        @forelse ($recentAlertEvents as $event)
+                            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p class="font-medium text-white">{{ $event->rule->name ?? 'Alert rule' }}</p>
+                                        <p class="mt-1 text-xs text-slate-400">{{ $event->rule->domain ?? 'All domains' }} · {{ str_replace('_', ' ', $event->rule->metric ?? '') }}</p>
+                                    </div>
+                                    <span class="rounded-full bg-rose-400/15 px-3 py-1 text-xs font-semibold text-rose-200">{{ number_format($event->current_fail_rate, 1) }}%</span>
+                                </div>
+                                <p class="mt-2 text-xs text-slate-500">{{ $event->triggered_at->diffForHumans() }} · baseline {{ number_format($event->baseline_fail_rate, 1) }}%</p>
+                            </div>
+                        @empty
+                            <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
+                                No alert events triggered yet.
+                            </div>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-white">DNS record health</h2>
+                    <p class="mt-1 text-sm text-slate-400">Latest SPF, DMARC, and DKIM lookups across your monitored domains.</p>
+                </div>
+            </div>
+
+            <div class="mt-5 grid gap-4 xl:grid-cols-3">
+                @foreach (['spf' => 'SPF', 'dmarc' => 'DMARC', 'dkim' => 'DKIM'] as $type => $label)
+                    @php $rowsForType = $dnsHealth->where('record_type', $type); @endphp
+                    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <h3 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300">{{ $label }}</h3>
+                        <div class="mt-3 space-y-3">
+                            @forelse ($rowsForType as $row)
+                                @php
+                                    $status = strtolower((string) $row->status);
+                                    $statusClasses = match ($status) {
+                                        'found' => 'bg-emerald-400/15 text-emerald-200',
+                                        'error' => 'bg-rose-400/15 text-rose-200',
+                                        'not_found' => 'bg-amber-400/15 text-amber-200',
+                                        default => 'bg-white/10 text-slate-200',
+                                    };
+                                @endphp
+                                <div class="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <p class="text-sm font-medium text-slate-100">{{ $row->domain }}</p>
+                                        <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses }}">{{ str_replace('_', ' ', $status) }}</span>
+                                    </div>
+                                    @if ($row->selector)
+                                        <p class="mt-1 text-xs text-slate-400">Selector: {{ $row->selector }}</p>
+                                    @endif
+                                    <p class="mt-2 text-[11px] text-slate-500">Checked {{ $row->fetched_at?->diffForHumans() ?? 'never' }}</p>
+                                </div>
+                            @empty
+                                <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-3 text-sm text-slate-400">
+                                    No {{ $label }} records collected yet.
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+                @endforeach
             </div>
         </section>
     </div>
