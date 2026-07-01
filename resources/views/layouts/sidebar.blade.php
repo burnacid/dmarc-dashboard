@@ -34,7 +34,7 @@
 
     $adminItems = [];
 
-    if (config('app.auth_diagnostics_enabled')) {
+    if (auth()->user()?->can('view-admin-tools') && config('app.auth_diagnostics_enabled')) {
         $adminItems[] = [
             'label' => 'Auth Logs',
             'route' => 'auth-diagnostics.index',
@@ -43,12 +43,48 @@
         ];
     }
 
-    if (config('app.system_logs_ui_enabled')) {
+    if (auth()->user()?->can('view-admin-tools') && config('app.system_logs_ui_enabled')) {
         $adminItems[] = [
             'label' => 'System Logs',
             'route' => 'system-logs.index',
             'active' => request()->routeIs('system-logs.*'),
             'icon' => 'terminal',
+        ];
+    }
+
+    if (auth()->user()?->can('manage-users')) {
+        $adminItems[] = [
+            'label' => 'Users',
+            'route' => 'admin.users.index',
+            'active' => request()->routeIs('admin.users.*'),
+            'icon' => 'users',
+        ];
+    }
+
+    if (auth()->user()?->can('manage-roles')) {
+        $adminItems[] = [
+            'label' => 'Roles',
+            'route' => 'admin.roles.index',
+            'active' => request()->routeIs('admin.roles.*'),
+            'icon' => 'roles',
+        ];
+    }
+
+    if (auth()->user()?->can('manage-organizations')) {
+        $adminItems[] = [
+            'label' => 'Organizations',
+            'route' => 'admin.organizations.index',
+            'active' => request()->routeIs('admin.organizations.*'),
+            'icon' => 'org',
+        ];
+    }
+
+    if (auth()->user()?->can('manage-domains')) {
+        $adminItems[] = [
+            'label' => 'Domains',
+            'route' => 'admin.domains.index',
+            'active' => request()->routeIs('admin.domains.*'),
+            'icon' => 'domain',
         ];
     }
 
@@ -60,6 +96,10 @@
         'bell'    => 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9',
         'shield' => 'M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z',
         'terminal' => 'M4 6h16v12H4z M8 10l2 2-2 2 M12 14h4',
+        'users' => 'M17 20h5v-2a4 4 0 0 0-3-3.87 M9 20H4v-2a4 4 0 0 1 3-3.87 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0z M23 20v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+        'roles' => 'M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z',
+        'org' => 'M3 21h18 M5 21V7l7-4 7 4v14 M9 9h1 M9 13h1 M14 9h1 M14 13h1',
+        'domain' => 'M12 2a10 10 0 1 0 0.001 0z M2 12h20 M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z',
     ];
 @endphp
 
@@ -97,27 +137,38 @@
                     @endforeach
                 </nav>
 
-                @can('view-admin-tools')
-                    @if ($adminItems !== [])
-                        <div class="mt-5 border-t border-white/10 pt-4">
-                            <p class="px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Admin tools</p>
-                            <nav class="mt-2 space-y-1">
-                                @foreach ($adminItems as $item)
-                                    <a href="{{ route($item['route']) }}" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition {{ $item['active'] ? 'bg-violet-400/20 text-violet-200 ring-1 ring-inset ring-violet-300/30' : 'text-violet-300/80 hover:bg-violet-400/10 hover:text-violet-200' }}">
-                                        <span class="flex h-7 w-7 items-center justify-center rounded-lg {{ $item['active'] ? 'bg-violet-300/15 text-violet-200' : 'bg-violet-500/10 text-violet-300/80' }}">
-                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="{{ $iconPaths[$item['icon']] }}" />
-                                            </svg>
-                                        </span>
-                                        <span>{{ $item['label'] }}</span>
-                                    </a>
-                                @endforeach
-                            </nav>
-                        </div>
-                    @endif
-                @endcan
+                @if ($adminItems !== [])
+                    <div class="mt-5 border-t border-white/10 pt-4">
+                        <p class="px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Admin tools</p>
+                        <nav class="mt-2 space-y-1">
+                            @foreach ($adminItems as $item)
+                                <a href="{{ route($item['route']) }}" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition {{ $item['active'] ? 'bg-violet-400/20 text-violet-200 ring-1 ring-inset ring-violet-300/30' : 'text-violet-300/80 hover:bg-violet-400/10 hover:text-violet-200' }}">
+                                    <span class="flex h-7 w-7 items-center justify-center rounded-lg {{ $item['active'] ? 'bg-violet-300/15 text-violet-200' : 'bg-violet-500/10 text-violet-300/80' }}">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="{{ $iconPaths[$item['icon']] }}" />
+                                        </svg>
+                                    </span>
+                                    <span>{{ $item['label'] }}</span>
+                                </a>
+                            @endforeach
+                        </nav>
+                    </div>
+                @endif
 
                 <div class="mt-5 border-t border-white/10 pt-4">
+                    @if (($globalOrganizationOptions ?? collect())->isNotEmpty())
+                        <form method="POST" action="{{ route('filters.organization.update') }}" class="mb-4">
+                            @csrf
+                            <label for="sidebar_org_mobile" class="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Organization filter</label>
+                            <select id="sidebar_org_mobile" name="organization_id" onchange="this.form.submit()" class="mt-2 w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 [color-scheme:dark] focus:border-sky-400 focus:outline-none focus:ring-0">
+                                <option value="">All organizations</option>
+                                @foreach (($globalOrganizationOptions ?? collect()) as $organization)
+                                    <option value="{{ $organization->id }}" @selected(($globalSelectedOrganization?->id ?? null) === $organization->id)>{{ $organization->name }}</option>
+                                @endforeach
+                            </select>
+                        </form>
+                    @endif
+
                     <form method="POST" action="{{ route('filters.domain.update') }}" class="mb-4">
                         @csrf
                         <label for="sidebar_domain_mobile" class="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Domain filter</label>
@@ -178,27 +229,38 @@
             @endforeach
         </nav>
 
-        @can('view-admin-tools')
-            @if ($adminItems !== [])
-                <div class="mt-6 border-t border-white/10 pt-4">
-                    <p class="px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Admin tools</p>
-                    <nav class="mt-2 space-y-1">
-                        @foreach ($adminItems as $item)
-                            <a href="{{ route($item['route']) }}" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition {{ $item['active'] ? 'bg-violet-400/20 text-violet-200 ring-1 ring-inset ring-violet-300/30' : 'text-violet-300/80 hover:bg-violet-400/10 hover:text-violet-200' }}">
-                                <span class="flex h-7 w-7 items-center justify-center rounded-lg {{ $item['active'] ? 'bg-violet-300/15 text-violet-200' : 'bg-violet-500/10 text-violet-300/80' }}">
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="{{ $iconPaths[$item['icon']] }}" />
-                                    </svg>
-                                </span>
-                                <span>{{ $item['label'] }}</span>
-                            </a>
-                        @endforeach
-                    </nav>
-                </div>
-            @endif
-        @endcan
+        @if ($adminItems !== [])
+            <div class="mt-6 border-t border-white/10 pt-4">
+                <p class="px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Admin tools</p>
+                <nav class="mt-2 space-y-1">
+                    @foreach ($adminItems as $item)
+                        <a href="{{ route($item['route']) }}" class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition {{ $item['active'] ? 'bg-violet-400/20 text-violet-200 ring-1 ring-inset ring-violet-300/30' : 'text-violet-300/80 hover:bg-violet-400/10 hover:text-violet-200' }}">
+                            <span class="flex h-7 w-7 items-center justify-center rounded-lg {{ $item['active'] ? 'bg-violet-300/15 text-violet-200' : 'bg-violet-500/10 text-violet-300/80' }}">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="{{ $iconPaths[$item['icon']] }}" />
+                                </svg>
+                            </span>
+                            <span>{{ $item['label'] }}</span>
+                        </a>
+                    @endforeach
+                </nav>
+            </div>
+        @endif
 
         <div class="mt-6 border-t border-white/10 pt-4">
+            @if (($globalOrganizationOptions ?? collect())->isNotEmpty())
+                <form method="POST" action="{{ route('filters.organization.update') }}" class="mb-4">
+                    @csrf
+                    <label for="sidebar_org" class="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Organization filter</label>
+                    <select id="sidebar_org" name="organization_id" onchange="this.form.submit()" class="mt-2 w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 [color-scheme:dark] focus:border-sky-400 focus:outline-none focus:ring-0">
+                        <option value="">All organizations</option>
+                        @foreach (($globalOrganizationOptions ?? collect()) as $organization)
+                            <option value="{{ $organization->id }}" @selected(($globalSelectedOrganization?->id ?? null) === $organization->id)>{{ $organization->name }}</option>
+                        @endforeach
+                    </select>
+                </form>
+            @endif
+
             <form method="POST" action="{{ route('filters.domain.update') }}">
                 @csrf
                 <label for="sidebar_domain" class="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Domain filter</label>

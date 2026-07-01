@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreImapAccountRequest;
 use App\Http\Requests\UpdateImapAccountRequest;
 use App\Models\ImapAccount;
+use App\Support\AccessScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
@@ -12,7 +13,7 @@ class ImapAccountController extends Controller
 {
     public function index(): View
     {
-        $accounts = auth()->user()->imapAccounts()
+        $accounts = AccessScope::ownedBy(ImapAccount::query(), auth()->user())
             ->withCount('reports')
             ->latest()
             ->get();
@@ -68,14 +69,16 @@ class ImapAccountController extends Controller
 
     public function destroy(ImapAccount $imapAccount): RedirectResponse
     {
-        $this->ownedAccount($imapAccount)->delete();
+        abort_unless(auth()->user()->can('delete', $imapAccount), 404);
+
+        $imapAccount->delete();
 
         return to_route('imap-accounts.index')->with('status', 'IMAP account removed.');
     }
 
     private function ownedAccount(ImapAccount $imapAccount): ImapAccount
     {
-        abort_unless($imapAccount->user_id === auth()->id(), 404);
+        abort_unless(auth()->user()->can('update', $imapAccount), 404);
 
         return $imapAccount;
     }

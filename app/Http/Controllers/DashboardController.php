@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Domain;
 use App\Models\DmarcAlertEvent;
 use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcRecord;
@@ -9,6 +10,7 @@ use App\Models\DmarcReport;
 use App\Models\ImapAccount;
 use App\Models\User;
 use App\Services\Dmarc\DmarcIngestionService;
+use App\Support\AccessScope;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -26,13 +28,24 @@ class DashboardController extends Controller
         $range = $this->resolveRange($request, $rangeOptions);
         $focus = $this->resolveFocus($request->string('focus')->toString());
         $selectedDomain = trim((string) $request->input('domain', (string) $request->session()->get('filters.domain', '')));
+        $organizationDomainNames = $this->organizationDomainNames($request);
 
-        $domainOptions = DB::table('dmarc_records')
-            ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
-            ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
-            ->where('imap_accounts.user_id', $user->id)
+        $domainOptions = AccessScope::ownedBy(
+            DB::table('dmarc_records')
+                ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+                ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id'),
+            $user,
+            'imap_accounts.user_id'
+        )
             ->selectRaw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain) as domain")
             ->whereNotNull(DB::raw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain)"))
+            ->when(
+                $organizationDomainNames !== null,
+                fn ($query) => $query->whereIn(
+                    DB::raw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain)"),
+                    $organizationDomainNames
+                )
+            )
             ->distinct()
             ->orderBy('domain')
             ->pluck('domain')
@@ -47,15 +60,18 @@ class DashboardController extends Controller
 
         $rangeQuery = $this->rangeQuery($range, $selectedDomain);
 
-        $accounts = $user->imapAccounts()
+        $accounts = AccessScope::ownedBy(ImapAccount::query(), $user)
             ->withCount('reports')
             ->latest()
             ->get();
 
-        $recentReports = DmarcReport::query()
+        $recentReports = AccessScope::ownedByViaRelation(DmarcReport::query(), $user, 'account')
             ->with('account:id,name,user_id')
-            ->whereHas('account', fn ($query) => $query->where('user_id', $user->id))
             ->when($selectedDomain !== '', fn ($query) => $query->where('policy_domain', $selectedDomain))
+            ->when(
+                $selectedDomain === '' && $organizationDomainNames !== null,
+                fn ($query) => $query->whereIn('policy_domain', $organizationDomainNames)
+            )
             ->where(function ($query) use ($range): void {
                 $query
                     ->whereBetween('report_end_at', [$range['start'], $range['end']])
@@ -70,10 +86,13 @@ class DashboardController extends Controller
             ->limit(8)
             ->get();
 
-        $recordRows = DmarcRecord::query()
-            ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
-            ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
-            ->where('imap_accounts.user_id', $user->id)
+        $recordRows = AccessScope::ownedBy(
+            DmarcRecord::query()
+                ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+                ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id'),
+            $user,
+            'imap_accounts.user_id'
+        )
             ->when(
                 $selectedDomain !== '',
                 fn ($query) => $query->where(function ($domainQuery) use ($selectedDomain): void {
@@ -89,6 +108,13 @@ class DashboardController extends Controller
                                 ->where('dmarc_reports.policy_domain', $selectedDomain);
                         });
                 })
+            )
+            ->when(
+                $selectedDomain === '' && $organizationDomainNames !== null,
+                fn ($query) => $query->whereIn(
+                    DB::raw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain)"),
+                    $organizationDomainNames
+                )
             )
             ->whereRaw('COALESCE(dmarc_reports.report_end_at, dmarc_reports.created_at) BETWEEN ? AND ?', [$range['start'], $range['end']])
             ->select([
@@ -144,16 +170,15 @@ class DashboardController extends Controller
             'reject' => $recordRows->filter(fn ($row) => strtolower((string) $row->disposition) === 'reject')->sum('message_count'),
         ]);
 
-        $deltas = $this->buildDeltas($user->id, $range, $selectedDomain, $recordRows->sum('message_count'), (int) $failureSummary['all']);
+        $deltas = $this->buildDeltas($user, $range, $selectedDomain, $organizationDomainNames, $recordRows->sum('message_count'), (int) $failureSummary['all']);
 
-        $recentAlertEvents = DmarcAlertEvent::query()
-            ->whereHas('rule', fn ($query) => $query->where('user_id', $user->id))
+        $recentAlertEvents = AccessScope::ownedByViaRelation(DmarcAlertEvent::query(), $user, 'rule')
             ->with('rule:id,name,metric,domain')
             ->latest('triggered_at')
             ->limit(5)
             ->get();
 
-        $dnsHealth = $this->buildDnsHealthSummary($user->id);
+        $dnsHealth = $this->buildDnsHealthSummary($user, $organizationDomainNames);
 
         $focusedFailures = $recordRows
             ->filter(fn ($row) => $this->matchesFocus($row, $focus))
@@ -197,7 +222,7 @@ class DashboardController extends Controller
     public function liveStats(Request $request): JsonResponse
     {
         $user = $request->user();
-        $accounts = $user->imapAccounts()->withCount('reports')->get();
+        $accounts = AccessScope::ownedBy(ImapAccount::query(), $user)->withCount('reports')->get();
 
         return response()->json([
             ...$this->buildHeadlineStats($accounts, $user),
@@ -211,8 +236,7 @@ class DashboardController extends Controller
             'account_id' => ['nullable', 'integer'],
         ]);
 
-        $accounts = ImapAccount::query()
-            ->where('user_id', $request->user()->id)
+        $accounts = AccessScope::ownedBy(ImapAccount::query(), $request->user())
             ->when(
                 filled($validated['account_id'] ?? null),
                 fn ($query) => $query->whereKey($validated['account_id']),
@@ -249,7 +273,10 @@ class DashboardController extends Controller
 
     public function showReport(DmarcReport $dmarcReport): View
     {
-        abort_unless($dmarcReport->account()->value('user_id') === auth()->id(), 404);
+        abort_unless(
+            AccessScope::sharedMode() || $dmarcReport->account()->value('user_id') === auth()->id(),
+            404
+        );
 
         $dmarcReport->load(['account:id,name,user_id', 'records']);
 
@@ -260,6 +287,21 @@ class DashboardController extends Controller
     }
 
     /**
+     * Domain names belonging to the organization selected via the session
+     * filter, or null when no organization is selected (no filtering).
+     */
+    private function organizationDomainNames(Request $request): ?Collection
+    {
+        $organizationId = $request->session()->get('filters.organization');
+
+        if ($organizationId === null) {
+            return null;
+        }
+
+        return Domain::query()->where('organization_id', $organizationId)->pluck('name');
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function buildHeadlineStats(Collection $accounts, User $user): array
@@ -267,9 +309,7 @@ class DashboardController extends Controller
         return [
             'total_accounts' => $accounts->count(),
             'active_accounts' => $accounts->where('is_active', true)->count(),
-            'total_reports' => DmarcReport::query()
-                ->whereHas('account', fn ($query) => $query->where('user_id', $user->id))
-                ->count(),
+            'total_reports' => AccessScope::ownedByViaRelation(DmarcReport::query(), $user, 'account')->count(),
             'last_polled_at' => $this->latestPoll($accounts),
         ];
     }
@@ -277,15 +317,18 @@ class DashboardController extends Controller
     /**
      * @return array{total_messages: ?float, failed_messages: ?float}
      */
-    private function buildDeltas(int $userId, array $range, string $selectedDomain, int $currentTotalMessages, int $currentFailedMessages): array
+    private function buildDeltas(User $user, array $range, string $selectedDomain, ?Collection $organizationDomainNames, int $currentTotalMessages, int $currentFailedMessages): array
     {
         $previousStart = $range['start']->copy()->subDays($range['days'])->startOfDay();
         $previousEnd = $range['start']->copy()->subDay()->endOfDay();
 
-        $previousRecordRows = DmarcRecord::query()
-            ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
-            ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
-            ->where('imap_accounts.user_id', $userId)
+        $previousRecordRows = AccessScope::ownedBy(
+            DmarcRecord::query()
+                ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+                ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id'),
+            $user,
+            'imap_accounts.user_id'
+        )
             ->when(
                 $selectedDomain !== '',
                 fn ($query) => $query->where(function ($domainQuery) use ($selectedDomain): void {
@@ -301,6 +344,13 @@ class DashboardController extends Controller
                                 ->where('dmarc_reports.policy_domain', $selectedDomain);
                         });
                 })
+            )
+            ->when(
+                $selectedDomain === '' && $organizationDomainNames !== null,
+                fn ($query) => $query->whereIn(
+                    DB::raw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain)"),
+                    $organizationDomainNames
+                )
             )
             ->whereRaw('COALESCE(dmarc_reports.report_end_at, dmarc_reports.created_at) BETWEEN ? AND ?', [$previousStart, $previousEnd])
             ->select(['dmarc_records.message_count', 'dmarc_records.dkim', 'dmarc_records.spf', 'dmarc_records.disposition'])
@@ -324,10 +374,13 @@ class DashboardController extends Controller
         return round((($current - $previous) / $previous) * 100, 1);
     }
 
-    private function buildDnsHealthSummary(int $userId): Collection
+    private function buildDnsHealthSummary(User $user, ?Collection $organizationDomainNames): Collection
     {
-        return DmarcDnsRecordSnapshot::query()
-            ->where('user_id', $userId)
+        return AccessScope::ownedBy(DmarcDnsRecordSnapshot::query(), $user)
+            ->when(
+                $organizationDomainNames !== null,
+                fn ($query) => $query->whereIn('domain', $organizationDomainNames)
+            )
             ->select(['record_type', 'domain', 'host', 'selector', 'status', 'fetched_at'])
             ->get()
             ->groupBy(fn ($row) => $row->record_type.'|'.$row->domain.'|'.$row->host)

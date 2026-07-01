@@ -2,9 +2,12 @@
 
 namespace App\Providers;
 
+use App\Models\Domain;
+use App\Models\Organization;
 use App\Models\User;
 use App\Services\Dns\NativeTxtRecordResolver;
 use App\Services\Dns\TxtRecordResolver;
+use App\Support\AccessScope;
 use App\Support\Auth\AuthDiagnostics;
 use Illuminate\Auth\Events\Attempting;
 use Illuminate\Auth\Events\Authenticated;
@@ -100,17 +103,42 @@ class AppServiceProvider extends ServiceProvider
 
             if (! $user) {
                 $view->with('globalDomainOptions', collect())
-                    ->with('globalSelectedDomain', '');
+                    ->with('globalSelectedDomain', '')
+                    ->with('globalOrganizationOptions', collect())
+                    ->with('globalSelectedOrganization', null);
 
                 return;
             }
 
-            $domainOptions = DB::table('dmarc_records')
-                ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
-                ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
-                ->where('imap_accounts.user_id', $user->id)
+            $organizationOptions = Organization::query()->orderBy('name')->get(['id', 'name']);
+
+            $selectedOrganizationId = session('filters.organization');
+            $selectedOrganization = $selectedOrganizationId !== null
+                ? $organizationOptions->firstWhere('id', (int) $selectedOrganizationId)
+                : null;
+
+            $domainOptionsQuery = AccessScope::ownedBy(
+                DB::table('dmarc_records')
+                    ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+                    ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id'),
+                $user,
+                'imap_accounts.user_id'
+            )
                 ->selectRaw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain) as domain")
-                ->whereNotNull(DB::raw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain)"))
+                ->whereNotNull(DB::raw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain)"));
+
+            if ($selectedOrganization !== null) {
+                $organizationDomainNames = Domain::query()
+                    ->where('organization_id', $selectedOrganization->id)
+                    ->pluck('name');
+
+                $domainOptionsQuery->whereIn(
+                    DB::raw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain)"),
+                    $organizationDomainNames
+                );
+            }
+
+            $domainOptions = $domainOptionsQuery
                 ->distinct()
                 ->orderBy('domain')
                 ->pluck('domain')
@@ -124,7 +152,9 @@ class AppServiceProvider extends ServiceProvider
             }
 
             $view->with('globalDomainOptions', $domainOptions)
-                ->with('globalSelectedDomain', $selectedDomain);
+                ->with('globalSelectedDomain', $selectedDomain)
+                ->with('globalOrganizationOptions', $organizationOptions)
+                ->with('globalSelectedOrganization', $selectedOrganization);
         });
     }
 }

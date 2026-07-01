@@ -16,6 +16,7 @@
         "laragear/webauthn": "5.0",
         "laravel/framework": "^13.0",
         "laravel/tinker": "^3.0",
+        "spatie/laravel-permission": "^8.1",
         "webklex/php-imap": "^6.2"
     },
     "require-dev": {

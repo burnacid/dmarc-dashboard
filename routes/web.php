@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Controllers\Admin\DomainController;
+use App\Http\Controllers\Admin\OrganizationController;
+use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\AuthDiagnosticLogController;
@@ -7,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DmarcReportController;
 use App\Http\Controllers\DomainFilterController;
 use App\Http\Controllers\ImapAccountController;
+use App\Http\Controllers\OrganizationFilterController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportSettingsController;
 use App\Http\Controllers\SecurityController;
@@ -31,6 +36,7 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::post('/filters/domain', [DomainFilterController::class, 'update'])->name('filters.domain.update');
+    Route::post('/filters/organization', [OrganizationFilterController::class, 'update'])->name('filters.organization.update');
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('/dashboard/poll-now', [DashboardController::class, 'pollNow'])->name('dashboard.poll-now');
@@ -61,6 +67,40 @@ Route::middleware('auth')->group(function () {
         Route::get('/system-logs', [SystemLogController::class, 'index'])->name('system-logs.index');
         Route::get('/system-logs/{systemLog}', [SystemLogController::class, 'show'])->name('system-logs.show');
         Route::delete('/system-logs', [SystemLogController::class, 'destroy'])->name('system-logs.destroy');
+    });
+
+    Route::middleware('can:manage-users')->prefix('admin/users')->name('admin.users.')->group(function () {
+        Route::get('/', [UserController::class, 'index'])->name('index');
+        Route::get('/create', [UserController::class, 'create'])->name('create');
+        Route::post('/', [UserController::class, 'store'])->name('store');
+        Route::get('/{user}/edit', [UserController::class, 'edit'])->name('edit');
+        Route::patch('/{user}', [UserController::class, 'update'])->name('update');
+        Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
+    });
+
+    Route::middleware('can:manage-roles')->prefix('admin/roles')->name('admin.roles.')->group(function () {
+        Route::get('/', [RoleController::class, 'index'])->name('index');
+        Route::get('/create', [RoleController::class, 'create'])->name('create');
+        Route::post('/', [RoleController::class, 'store'])->name('store');
+        Route::get('/{role}/edit', [RoleController::class, 'edit'])->name('edit');
+        Route::patch('/{role}', [RoleController::class, 'update'])->name('update');
+        Route::delete('/{role}', [RoleController::class, 'destroy'])->name('destroy');
+    });
+
+    Route::middleware('can:manage-organizations')->prefix('admin/organizations')->name('admin.organizations.')->group(function () {
+        Route::get('/', [OrganizationController::class, 'index'])->name('index');
+        Route::get('/create', [OrganizationController::class, 'create'])->name('create');
+        Route::post('/', [OrganizationController::class, 'store'])->name('store');
+        Route::get('/{organization}/edit', [OrganizationController::class, 'edit'])->name('edit');
+        Route::patch('/{organization}', [OrganizationController::class, 'update'])->name('update');
+        Route::delete('/{organization}', [OrganizationController::class, 'destroy'])->name('destroy');
+    });
+
+    Route::middleware('can:manage-domains')->prefix('admin/domains')->name('admin.domains.')->group(function () {
+        Route::get('/', [DomainController::class, 'index'])->name('index');
+        Route::post('/', [DomainController::class, 'store'])->name('store');
+        Route::patch('/{domain}', [DomainController::class, 'update'])->name('update');
+        Route::delete('/{domain}', [DomainController::class, 'destroy'])->name('destroy');
     });
 
     Route::prefix('security')->name('security.')->group(function () {

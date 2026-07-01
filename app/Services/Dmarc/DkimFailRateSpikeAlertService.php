@@ -4,6 +4,7 @@ namespace App\Services\Dmarc;
 
 use App\Models\DmarcAlertRule;
 use App\Models\DmarcRecord;
+use App\Support\AccessScope;
 use Carbon\Carbon;
 
 class DkimFailRateSpikeAlertService
@@ -65,7 +66,10 @@ class DkimFailRateSpikeAlertService
         $totals = DmarcRecord::query()
             ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
             ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
-            ->where('imap_accounts.user_id', $rule->user_id)
+            ->when(
+                ! AccessScope::sharedMode(),
+                fn ($query) => $query->where('imap_accounts.user_id', $rule->user_id)
+            )
             ->whereRaw('COALESCE(dmarc_reports.report_end_at, dmarc_reports.created_at) BETWEEN ? AND ?', [$start, $end])
             ->when(
                 filled($rule->domain),
