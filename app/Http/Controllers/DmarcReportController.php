@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Domain;
 use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
 use App\Models\User;
+use App\Support\AccessScope;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -37,15 +39,19 @@ class DmarcReportController extends Controller
                 : 25,
         ];
 
-        $accounts = ImapAccount::query()
-            ->where('user_id', $user->id)
+        $organizationDomainNames = $this->organizationDomainNames($request);
+
+        $accounts = AccessScope::ownedBy(ImapAccount::query(), $user)
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $domains = DmarcReport::query()
-            ->whereHas('account', fn ($query) => $query->where('user_id', $user->id))
+        $domains = AccessScope::ownedByViaRelation(DmarcReport::query(), $user, 'account')
             ->whereNotNull('policy_domain')
             ->where('policy_domain', '!=', '')
+            ->when(
+                $organizationDomainNames !== null,
+                fn ($query) => $query->whereIn('policy_domain', $organizationDomainNames)
+            )
             ->distinct()
             ->orderBy('policy_domain')
             ->pluck('policy_domain');
@@ -58,14 +64,17 @@ class DmarcReportController extends Controller
 
         $request->session()->put('filters.domain', $filters['domain']);
 
-        $reports = DmarcReport::query()
+        $reports = AccessScope::ownedByViaRelation(DmarcReport::query(), $user, 'account')
             ->with('account:id,name,user_id')
             ->with('records:id,dmarc_report_id,message_count,dkim,spf')
             ->withCount('records')
             ->withSum('records as total_messages', 'message_count')
-            ->whereHas('account', fn ($query) => $query->where('user_id', $user->id))
             ->when($filters['account_id'], fn ($query, $accountId) => $query->where('imap_account_id', $accountId))
             ->when($filters['domain'] !== '', fn ($query) => $query->where('policy_domain', $filters['domain']))
+            ->when(
+                $filters['domain'] === '' && $organizationDomainNames !== null,
+                fn ($query) => $query->whereIn('policy_domain', $organizationDomainNames)
+            )
             ->when($filters['org'] !== '', fn ($query) => $query->where('org_name', 'like', '%'.$filters['org'].'%'))
             ->when($filters['report_id'] !== '', fn ($query) => $query->where('external_report_id', 'like', '%'.$filters['report_id'].'%'))
             ->when(
@@ -105,14 +114,17 @@ class DmarcReportController extends Controller
 
     public function show(DmarcReport $dmarcReport): View
     {
-        abort_unless($dmarcReport->account()->value('user_id') === auth()->id(), 404);
+        abort_unless(
+            AccessScope::sharedMode() || $dmarcReport->account()->value('user_id') === auth()->id(),
+            404
+        );
 
         $dmarcReport->load(['account:id,name,user_id', 'records']);
 
         return view('dmarc-reports.show', [
             'report' => $dmarcReport,
             'formattedXml' => $this->formatXml($dmarcReport->raw_xml),
-            'dnsSnapshotContext' => $this->buildDnsSnapshotContext($dmarcReport, (int) auth()->id()),
+            'dnsSnapshotContext' => $this->buildDnsSnapshotContext($dmarcReport, auth()->user()),
         ]);
     }
 
@@ -120,6 +132,21 @@ class DmarcReportController extends Controller
     {
 
         return trim($xml);
+    }
+
+    /**
+     * Domain names belonging to the organization selected via the session
+     * filter, or null when no organization is selected (no filtering).
+     */
+    private function organizationDomainNames(Request $request): ?Collection
+    {
+        $organizationId = $request->session()->get('filters.organization');
+
+        if ($organizationId === null) {
+            return null;
+        }
+
+        return Domain::query()->where('organization_id', $organizationId)->pluck('name');
     }
 
     /**
@@ -259,7 +286,7 @@ class DmarcReportController extends Controller
     /**
      * @return array<string, array<int, array<string, mixed>>>
      */
-    private function buildDnsSnapshotContext(DmarcReport $report, int $userId): array
+    private function buildDnsSnapshotContext(DmarcReport $report, User $user): array
     {
         $domains = $report->records
             ->map(fn ($record) => trim(strtolower((string) ($record->header_from ?: $report->policy_domain))))
@@ -292,8 +319,7 @@ class DmarcReportController extends Controller
             ->unique()
             ->values();
 
-        $snapshots = DmarcDnsRecordSnapshot::query()
-            ->where('user_id', $userId)
+        $snapshots = AccessScope::ownedBy(DmarcDnsRecordSnapshot::query(), $user)
             ->whereIn('host', $hosts)
             ->get()
             ->keyBy(fn (DmarcDnsRecordSnapshot $snapshot) => $snapshot->record_type.'|'.$snapshot->host);

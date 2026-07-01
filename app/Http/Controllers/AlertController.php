@@ -9,6 +9,7 @@ use App\Models\DmarcNotificationChannel;
 use App\Services\Dmarc\DkimFailRateSpikeAlertService;
 use App\Services\Dmarc\DmarcAlertNotificationDispatcher;
 use App\Services\Dmarc\SpfFailRateSpikeAlertService;
+use App\Support\AccessScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -19,8 +20,7 @@ class AlertController extends Controller
     {
         $user = $request->user();
 
-        $rules = DmarcAlertRule::query()
-            ->where('user_id', $user->id)
+        $rules = AccessScope::ownedBy(DmarcAlertRule::query(), $user)
             ->with([
                 'events' => fn ($q) => $q->latest('triggered_at')->limit(5),
                 'notificationChannels',
@@ -28,7 +28,7 @@ class AlertController extends Controller
             ->latest('id')
             ->paginate(20);
 
-        $channels = $user->dmarcNotificationChannels()
+        $channels = AccessScope::ownedBy(DmarcNotificationChannel::query(), $user)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
@@ -56,7 +56,7 @@ class AlertController extends Controller
 
     public function updateRule(UpdateAlertRulesRequest $request, DmarcAlertRule $dmarcAlertRule): RedirectResponse
     {
-        abort_unless($dmarcAlertRule->user_id === $request->user()->id, 404);
+        abort_unless($request->user()->can('update', $dmarcAlertRule), 404);
 
         $this->fillRuleSettings($dmarcAlertRule, $request);
         $dmarcAlertRule->save();
@@ -67,7 +67,7 @@ class AlertController extends Controller
 
     public function destroyRule(Request $request, DmarcAlertRule $dmarcAlertRule): RedirectResponse
     {
-        abort_unless($dmarcAlertRule->user_id === $request->user()->id, 404);
+        abort_unless($request->user()->can('delete', $dmarcAlertRule), 404);
 
         $dmarcAlertRule->delete();
 
@@ -76,7 +76,7 @@ class AlertController extends Controller
 
     public function channels(Request $request): View
     {
-        $channels = $request->user()->dmarcNotificationChannels()
+        $channels = AccessScope::ownedBy(DmarcNotificationChannel::query(), $request->user())
             ->orderByDesc('id')
             ->get();
 
@@ -101,7 +101,7 @@ class AlertController extends Controller
 
     public function updateChannel(UpdateAlertChannelsRequest $request, DmarcNotificationChannel $dmarcNotificationChannel): RedirectResponse
     {
-        abort_unless($dmarcNotificationChannel->user_id === $request->user()->id, 404);
+        abort_unless($request->user()->can('update', $dmarcNotificationChannel), 404);
 
         $this->fillChannelSettings($dmarcNotificationChannel, $request);
         $dmarcNotificationChannel->save();
@@ -111,7 +111,7 @@ class AlertController extends Controller
 
     public function destroyChannel(Request $request, DmarcNotificationChannel $dmarcNotificationChannel): RedirectResponse
     {
-        abort_unless($dmarcNotificationChannel->user_id === $request->user()->id, 404);
+        abort_unless($request->user()->can('delete', $dmarcNotificationChannel), 404);
 
         $dmarcNotificationChannel->delete();
 
@@ -125,7 +125,7 @@ class AlertController extends Controller
         DmarcAlertNotificationDispatcher $dispatcher,
         Request $request,
     ): RedirectResponse {
-        abort_unless($dmarcAlertRule->user_id === $request->user()->id, 404);
+        abort_unless($request->user()->can('update', $dmarcAlertRule), 404);
 
         $now = \Carbon\Carbon::now();
 

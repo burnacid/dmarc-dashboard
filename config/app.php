@@ -152,4 +152,17 @@ return [
 
     'system_logs_retention_days' => (int) env('APP_SYSTEM_LOGS_RETENTION_DAYS', 30),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Shared Mode
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, all IMAP accounts, reports, alert rules, notification
+    | channels, and DNS snapshots become visible to every authenticated
+    | user instead of being scoped to the user who created them.
+    |
+    */
+
+    'shared_mode' => (bool) env('APP_SHARED_MODE', false),
+
 ];

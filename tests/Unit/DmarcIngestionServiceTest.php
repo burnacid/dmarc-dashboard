@@ -104,6 +104,11 @@ class DmarcIngestionServiceTest extends TestCase
         $this->assertSame('valid-report-1', $report->external_report_id);
         $this->assertSame('example.com', $report->policy_domain);
         $this->assertCount(1, $report->records);
+
+        $this->assertDatabaseHas('domains', [
+            'name' => 'example.com',
+            'organization_id' => null,
+        ]);
     }
 
     public function test_it_counts_spam_messages_as_errors_when_no_error_folder_is_configured(): void

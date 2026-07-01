@@ -2,6 +2,7 @@
 
 namespace App\Services\Dmarc;
 
+use App\Models\Domain;
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
 use Illuminate\Support\Facades\Log;
@@ -212,6 +213,10 @@ class DmarcIngestionService
 
         foreach ($xmlPayloads as $xmlPayload) {
             $parsed = $this->xmlParser->parse($xmlPayload);
+
+            if (filled($parsed['policy_domain'])) {
+                Domain::register($parsed['policy_domain']);
+            }
 
             $report = DmarcReport::updateOrCreate(
                 [

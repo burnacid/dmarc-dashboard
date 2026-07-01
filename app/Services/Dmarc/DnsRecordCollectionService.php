@@ -6,6 +6,7 @@ use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcRecord;
 use App\Models\User;
 use App\Services\Dns\TxtRecordResolver;
+use App\Support\AccessScope;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
@@ -54,19 +55,25 @@ class DnsRecordCollectionService
      */
     private function candidateDomains(User $user): Collection
     {
-        $headerFromDomains = DmarcRecord::query()
-            ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
-            ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
-            ->where('imap_accounts.user_id', $user->id)
+        $headerFromDomains = AccessScope::ownedBy(
+            DmarcRecord::query()
+                ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+                ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id'),
+            $user,
+            'imap_accounts.user_id'
+        )
             ->whereNotNull('dmarc_records.header_from')
             ->where('dmarc_records.header_from', '!=', '')
             ->distinct()
             ->pluck('dmarc_records.header_from');
 
-        $policyDomains = DmarcRecord::query()
-            ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
-            ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
-            ->where('imap_accounts.user_id', $user->id)
+        $policyDomains = AccessScope::ownedBy(
+            DmarcRecord::query()
+                ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+                ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id'),
+            $user,
+            'imap_accounts.user_id'
+        )
             ->whereNotNull('dmarc_reports.policy_domain')
             ->where('dmarc_reports.policy_domain', '!=', '')
             ->distinct()
@@ -85,10 +92,13 @@ class DnsRecordCollectionService
      */
     private function candidateDkimHosts(User $user): Collection
     {
-        return DmarcRecord::query()
-            ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
-            ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
-            ->where('imap_accounts.user_id', $user->id)
+        return AccessScope::ownedBy(
+            DmarcRecord::query()
+                ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+                ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id'),
+            $user,
+            'imap_accounts.user_id'
+        )
             ->whereNotNull('dmarc_records.dkim_domain')
             ->where('dmarc_records.dkim_domain', '!=', '')
             ->whereNotNull('dmarc_records.dkim_selector')

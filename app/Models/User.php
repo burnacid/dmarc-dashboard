@@ -14,13 +14,21 @@ use Laragear\TwoFactor\Contracts\TwoFactorAuthenticatable;
 use Laragear\TwoFactor\TwoFactorAuthentication;
 use Laragear\WebAuthn\Contracts\WebAuthnAuthenticatable;
 use Laragear\WebAuthn\WebAuthnAuthentication;
+use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password', 'is_admin', 'report_retention_days', 'dashboard_range_presets'])]
+#[Fillable(['name', 'email', 'password', 'is_admin', 'is_active', 'report_retention_days', 'dashboard_range_presets'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements TwoFactorAuthenticatable, WebAuthnAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, TwoFactorAuthentication, WebAuthnAuthentication;
+    use HasFactory, HasRoles, Notifiable, TwoFactorAuthentication, WebAuthnAuthentication;
+
+    /**
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'is_active' => true,
+    ];
 
     /**
      * Get the attributes that should be cast.
@@ -33,12 +41,17 @@ class User extends Authenticatable implements TwoFactorAuthenticatable, WebAuthn
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'is_active' => 'boolean',
             'dashboard_range_presets' => 'array',
         ];
     }
 
     public function isAdmin(): bool
     {
+        if ($this->hasRole('Admin')) {
+            return true;
+        }
+
         if ((bool) $this->is_admin) {
             return true;
         }

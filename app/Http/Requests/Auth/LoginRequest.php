@@ -60,6 +60,19 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        if (! Auth::user()->is_active) {
+            AuthDiagnostics::log('password.blocked', $this, [
+                'reason' => 'account_disabled',
+                'user_id' => Auth::id(),
+            ], 'warning');
+
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'This account has been disabled.',
+            ]);
+        }
+
         AuthDiagnostics::log('password.success', $this, [
             'user_id' => Auth::id(),
             'remember_requested' => $this->boolean('remember'),

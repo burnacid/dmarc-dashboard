@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\AccessScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,10 +28,13 @@ class DomainFilterController extends Controller
 
     private function availableDomains(Request $request)
     {
-        return DB::table('dmarc_records')
-            ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
-            ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id')
-            ->where('imap_accounts.user_id', $request->user()->id)
+        return AccessScope::ownedBy(
+            DB::table('dmarc_records')
+                ->join('dmarc_reports', 'dmarc_reports.id', '=', 'dmarc_records.dmarc_report_id')
+                ->join('imap_accounts', 'imap_accounts.id', '=', 'dmarc_reports.imap_account_id'),
+            $request->user(),
+            'imap_accounts.user_id'
+        )
             ->selectRaw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain) as domain")
             ->whereNotNull(DB::raw("COALESCE(NULLIF(dmarc_records.header_from, ''), dmarc_reports.policy_domain)"))
             ->distinct()
