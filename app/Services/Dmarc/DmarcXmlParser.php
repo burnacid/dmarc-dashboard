@@ -63,6 +63,42 @@ class DmarcXmlParser
         ];
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public function parsePolicyPublished(string $xml): array
+    {
+        libxml_use_internal_errors(true);
+        $root = simplexml_load_string($xml, SimpleXMLElement::class, LIBXML_NONET);
+
+        if (! $root instanceof SimpleXMLElement) {
+            return [];
+        }
+
+        $published = $root->xpath('policy_published');
+        if (! is_array($published) || ! isset($published[0])) {
+            return [];
+        }
+
+        $tags = [];
+        foreach ($published[0]->children() as $child) {
+            $tag = strtolower($child->getName());
+
+            if ($tag === 'domain') {
+                continue;
+            }
+
+            $value = trim((string) $child);
+            if ($value === '') {
+                continue;
+            }
+
+            $tags[$tag] = $value;
+        }
+
+        return $tags;
+    }
+
     private function readNode(SimpleXMLElement $root, string $path): ?string
     {
         $result = $root->xpath($path);
@@ -93,4 +129,3 @@ class DmarcXmlParser
         return $this->nullableString($result[0]);
     }
 }
-

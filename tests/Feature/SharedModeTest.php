@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DmarcRecord;
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
 use App\Models\User;
@@ -28,7 +29,7 @@ class SharedModeTest extends TestCase
             'is_active' => true,
         ]);
 
-        DmarcReport::query()->create([
+        $report = DmarcReport::query()->create([
             'imap_account_id' => $account->id,
             'external_report_id' => 'report-'.$account->id,
             'org_name' => 'Google',
@@ -37,6 +38,15 @@ class SharedModeTest extends TestCase
             'report_end_at' => now(),
             'policy_domain' => $domain,
             'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $report->id,
+            'source_ip' => '203.0.113.'.$account->id,
+            'message_count' => 5,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
         ]);
 
         return $account;

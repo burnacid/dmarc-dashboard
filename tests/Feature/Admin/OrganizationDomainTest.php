@@ -2,8 +2,9 @@
 
 namespace Tests\Feature\Admin;
 
-use App\Models\Domain;
+use App\Models\DmarcRecord;
 use App\Models\DmarcReport;
+use App\Models\Domain;
 use App\Models\ImapAccount;
 use App\Models\Organization;
 use App\Models\User;
@@ -93,7 +94,7 @@ class OrganizationDomainTest extends TestCase
             'is_active' => true,
         ]);
 
-        DmarcReport::query()->create([
+        $inOrgReport = DmarcReport::query()->create([
             'imap_account_id' => $account->id,
             'external_report_id' => 'report-in-org',
             'org_name' => 'Google',
@@ -103,7 +104,7 @@ class OrganizationDomainTest extends TestCase
             'raw_xml' => '<feedback />',
         ]);
 
-        DmarcReport::query()->create([
+        $outOfOrgReport = DmarcReport::query()->create([
             'imap_account_id' => $account->id,
             'external_report_id' => 'report-out-of-org',
             'org_name' => 'Google',
@@ -111,6 +112,24 @@ class OrganizationDomainTest extends TestCase
             'report_end_at' => now(),
             'policy_domain' => 'out-of-org.example',
             'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $inOrgReport->id,
+            'source_ip' => '203.0.113.10',
+            'message_count' => 5,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $outOfOrgReport->id,
+            'source_ip' => '203.0.113.11',
+            'message_count' => 5,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
         ]);
 
         $organization = Organization::create(['name' => 'Acme Corp']);

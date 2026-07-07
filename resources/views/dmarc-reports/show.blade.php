@@ -41,6 +41,22 @@
                         <dd class="mt-2 text-sm font-medium text-white">{{ $report->email ?? '—' }}</dd>
                     </div>
                 </dl>
+
+                @if (! empty($policyPublished))
+                    <div class="mt-6">
+                        <h3 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300">Published policy</h3>
+                        <p class="mt-1 text-xs text-slate-500">The DMARC policy this report says was published for {{ $report->policy_domain ?? 'this domain' }} at the time of reporting.</p>
+
+                        <dl class="mt-3 space-y-1 rounded-2xl border border-white/5 bg-white/5 p-3">
+                            @foreach ($policyPublished as $tag)
+                                <div class="flex items-start justify-between gap-3 text-xs">
+                                    <dt class="text-slate-400">{{ $tag['label'] }}</dt>
+                                    <dd class="break-all text-right text-slate-200">{{ $tag['value'] }}</dd>
+                                </div>
+                            @endforeach
+                        </dl>
+                    </div>
+                @endif
             </div>
 
             <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
