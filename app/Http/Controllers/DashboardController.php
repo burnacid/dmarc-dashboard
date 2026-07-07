@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Domain;
-use App\Models\DmarcAlertEvent;
 use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcRecord;
 use App\Models\DmarcReport;
+use App\Models\Domain;
 use App\Models\ImapAccount;
 use App\Models\User;
 use App\Services\Dmarc\DmarcIngestionService;
+use App\Services\Dns\DnsPolicyRecordParser;
 use App\Support\AccessScope;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -21,12 +21,13 @@ use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, DnsPolicyRecordParser $policyRecordParser): View
     {
         $user = $request->user();
         $rangeOptions = $this->rangeOptionsForUser($user);
         $range = $this->resolveRange($request, $rangeOptions);
         $focus = $this->resolveFocus($request->string('focus')->toString());
+        $activeTab = $this->resolveTab($request->string('tab')->toString());
         $selectedDomain = trim((string) $request->input('domain', (string) $request->session()->get('filters.domain', '')));
         $organizationDomainNames = $this->organizationDomainNames($request);
 
@@ -60,31 +61,7 @@ class DashboardController extends Controller
 
         $rangeQuery = $this->rangeQuery($range, $selectedDomain);
 
-        $accounts = AccessScope::ownedBy(ImapAccount::query(), $user)
-            ->withCount('reports')
-            ->latest()
-            ->get();
-
-        $recentReports = AccessScope::ownedByViaRelation(DmarcReport::query(), $user, 'account')
-            ->with('account:id,name,user_id')
-            ->when($selectedDomain !== '', fn ($query) => $query->where('policy_domain', $selectedDomain))
-            ->when(
-                $selectedDomain === '' && $organizationDomainNames !== null,
-                fn ($query) => $query->whereIn('policy_domain', $organizationDomainNames)
-            )
-            ->where(function ($query) use ($range): void {
-                $query
-                    ->whereBetween('report_end_at', [$range['start'], $range['end']])
-                    ->orWhere(function ($orQuery) use ($range): void {
-                        $orQuery
-                            ->whereNull('report_end_at')
-                            ->whereBetween('created_at', [$range['start'], $range['end']]);
-                    });
-            })
-            ->latest('report_end_at')
-            ->latest()
-            ->limit(8)
-            ->get();
+        $accounts = AccessScope::ownedBy(ImapAccount::query(), $user)->latest()->get();
 
         $recordRows = AccessScope::ownedBy(
             DmarcRecord::query()
@@ -172,13 +149,9 @@ class DashboardController extends Controller
 
         $deltas = $this->buildDeltas($user, $range, $selectedDomain, $organizationDomainNames, $recordRows->sum('message_count'), (int) $failureSummary['all']);
 
-        $recentAlertEvents = AccessScope::ownedByViaRelation(DmarcAlertEvent::query(), $user, 'rule')
-            ->with('rule:id,name,metric,domain')
-            ->latest('triggered_at')
-            ->limit(5)
-            ->get();
+        $dnsHealth = $this->buildDnsHealthSummary($user, $organizationDomainNames, $policyRecordParser);
 
-        $dnsHealth = $this->buildDnsHealthSummary($user, $organizationDomainNames);
+        $senderTriage = $this->buildSenderTriage($recordRows);
 
         $focusedFailures = $recordRows
             ->filter(fn ($row) => $this->matchesFocus($row, $focus))
@@ -197,8 +170,6 @@ class DashboardController extends Controller
             ]);
 
         return view('dashboard', [
-            'accounts' => $accounts,
-            'recentReports' => $recentReports,
             'topSources' => $topSources,
             'domainVolumes' => $domainVolumes,
             'resultSummary' => $resultSummary,
@@ -208,13 +179,14 @@ class DashboardController extends Controller
             'rangeOptions' => $rangeOptions,
             'focus' => $focus,
             'focusOptions' => $this->focusOptions(),
+            'activeTab' => $activeTab,
             'domainOptions' => $domainOptions,
             'selectedDomain' => $selectedDomain,
             'failureSummary' => $failureSummary,
             'focusedFailures' => $focusedFailures,
             'deltas' => $deltas,
-            'recentAlertEvents' => $recentAlertEvents,
             'dnsHealth' => $dnsHealth,
+            'senderTriage' => $senderTriage,
             'stats' => $this->buildHeadlineStats($accounts, $user),
         ]);
     }
@@ -374,19 +346,81 @@ class DashboardController extends Controller
         return round((($current - $previous) / $previous) * 100, 1);
     }
 
-    private function buildDnsHealthSummary(User $user, ?Collection $organizationDomainNames): Collection
+    /**
+     * Groups failing record rows into actionable buckets:
+     * - "unauthorized": both DKIM and DKIM alignment fail, i.e. neither
+     *   authentication mechanism vouches for the source — likely spoofing.
+     * - "missingSpf": DKIM passes but SPF fails, i.e. a legitimately signing
+     *   sender whose sending IPs simply aren't declared in the SPF record.
+     *
+     * @return array{unauthorized: Collection, missingSpf: Collection}
+     */
+    private function buildSenderTriage(Collection $recordRows): array
+    {
+        $unauthorized = $recordRows
+            ->filter(fn ($row) => strtolower((string) $row->dkim) === 'fail' && strtolower((string) $row->spf) === 'fail')
+            ->groupBy('source_ip')
+            ->map(fn (Collection $rows, string $sourceIp) => (object) [
+                'source_ip' => $sourceIp,
+                'total_messages' => $rows->sum('message_count'),
+                'domains' => $rows->map(fn ($row) => $this->domainForRow($row))->unique()->values(),
+                'last_seen' => $this->latestRowTimestamp($rows),
+            ])
+            ->sortByDesc('total_messages')
+            ->take(15)
+            ->values();
+
+        $missingSpf = $recordRows
+            ->filter(fn ($row) => strtolower((string) $row->dkim) === 'pass' && strtolower((string) $row->spf) === 'fail')
+            ->groupBy(fn ($row) => filled($row->dkim_domain) ? $row->dkim_domain : $row->source_ip)
+            ->map(fn (Collection $rows) => (object) [
+                'dkim_domain' => $rows->first()->dkim_domain ?: null,
+                'spf_domain' => $rows->first()->spf_domain ?: null,
+                'source_ips' => $rows->pluck('source_ip')->unique()->values(),
+                'domains' => $rows->map(fn ($row) => $this->domainForRow($row))->unique()->values(),
+                'total_messages' => $rows->sum('message_count'),
+                'last_seen' => $this->latestRowTimestamp($rows),
+            ])
+            ->sortByDesc('total_messages')
+            ->take(15)
+            ->values();
+
+        return [
+            'unauthorized' => $unauthorized,
+            'missingSpf' => $missingSpf,
+        ];
+    }
+
+    private function latestRowTimestamp(Collection $rows): Carbon
+    {
+        return $rows
+            ->map(fn ($row) => $row->report_end_at ? Carbon::parse($row->report_end_at) : Carbon::parse($row->report_created_at))
+            ->max();
+    }
+
+    private function buildDnsHealthSummary(User $user, ?Collection $organizationDomainNames, DnsPolicyRecordParser $policyRecordParser): Collection
     {
         return AccessScope::ownedBy(DmarcDnsRecordSnapshot::query(), $user)
             ->when(
                 $organizationDomainNames !== null,
                 fn ($query) => $query->whereIn('domain', $organizationDomainNames)
             )
-            ->select(['record_type', 'domain', 'host', 'selector', 'status', 'fetched_at'])
+            ->select(['record_type', 'domain', 'host', 'selector', 'records', 'status', 'fetched_at'])
             ->get()
             ->groupBy(fn ($row) => $row->record_type.'|'.$row->domain.'|'.$row->host)
             ->map(fn (Collection $rows) => $rows->sortByDesc('fetched_at')->first())
             ->sortBy(fn ($row) => $row->domain.'|'.$row->record_type)
-            ->values();
+            ->values()
+            ->map(function ($row) use ($policyRecordParser) {
+                $row->parsed_records = collect((array) $row->records)
+                    ->map(fn ($record) => [
+                        'raw' => (string) $record,
+                        'tags' => $policyRecordParser->parse($row->record_type, (string) $record),
+                    ])
+                    ->values();
+
+                return $row;
+            });
     }
 
     private function latestPoll(Collection $accounts): ?string
@@ -531,6 +565,11 @@ class DashboardController extends Controller
     private function resolveFocus(string $focus): string
     {
         return array_key_exists($focus, $this->focusOptions()) ? $focus : 'all';
+    }
+
+    private function resolveTab(string $tab): string
+    {
+        return in_array($tab, ['overview', 'triage', 'dns'], true) ? $tab : 'overview';
     }
 
     private function buildTimeSeries(Collection $recordRows, Carbon $start, Carbon $end, string $selectedDomain = ''): Collection

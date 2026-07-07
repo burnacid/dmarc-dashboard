@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\DmarcAlertRule;
 use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcRecord;
 use App\Models\DmarcReport;
@@ -79,13 +78,10 @@ class DashboardTest extends TestCase
             ->get(route('dashboard'))
             ->assertOk()
             ->assertSee('DMARC monitoring dashboard')
-            ->assertSee('Primary Inbox')
-            ->assertSee('Google')
             ->assertSee('Records per domain')
             ->assertSee('Authentication results')
             ->assertSee('DKIM pass')
-            ->assertSee('203.0.113.10')
-            ->assertDontSee('Other Inbox');
+            ->assertSee('203.0.113.10');
     }
 
     public function test_dashboard_defaults_to_one_month_but_can_expand_range(): void
@@ -150,15 +146,14 @@ class DashboardTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Current Sender')
             ->assertSee('current.example')
-            ->assertDontSee('Old Sender');
+            ->assertDontSee('203.0.113.99');
 
         $this->actingAs($user)
             ->get(route('dashboard', ['range' => '90d']))
             ->assertOk()
-            ->assertSee('Old Sender')
-            ->assertSee('old.example');
+            ->assertSee('old.example')
+            ->assertSee('203.0.113.99');
     }
 
     public function test_dashboard_can_filter_by_custom_date_range(): void
@@ -227,9 +222,8 @@ class DashboardTest extends TestCase
                 'to' => now()->format('Y-m-d'),
             ]))
             ->assertOk()
-            ->assertSee('Recent Sender')
             ->assertSee('recent.example')
-            ->assertDontSee('Old Sender');
+            ->assertDontSee('203.0.113.99');
     }
 
     public function test_dashboard_can_filter_by_domain_and_shows_user_domain_options_only(): void
@@ -337,8 +331,8 @@ class DashboardTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard', ['domain' => 'alpha.example']))
             ->assertOk()
-            ->assertSee('Alpha Sender')
-            ->assertDontSee('Beta Sender');
+            ->assertSee('203.0.113.10')
+            ->assertDontSee('203.0.113.11');
     }
 
     public function test_user_can_view_their_original_report_but_not_someone_elses(): void
@@ -403,6 +397,97 @@ class DashboardTest extends TestCase
         $this->actingAs($user)
             ->get(route('reports.show', $otherReport))
             ->assertNotFound();
+    }
+
+    public function test_report_detail_page_shows_parsed_published_policy_tags(): void
+    {
+        $user = User::factory()->create();
+
+        $account = ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $rawXml = <<<'XML'
+<?xml version="1.0"?>
+<feedback>
+	<version>0.1</version>
+	<report_metadata>
+		<org_name>AMAZON-SES</org_name>
+		<email>postmaster@amazonses.com</email>
+		<report_id>674394fd-26f3-4172-9a8d-6e4e52687cf7</report_id>
+		<date_range>
+			<begin>1783296000</begin>
+			<end>1783382399</end>
+		</date_range>
+	</report_metadata>
+	<policy_published>
+		<domain>lenders-it.nl</domain>
+		<adkim>r</adkim>
+		<aspf>r</aspf>
+		<p>reject</p>
+		<sp>reject</sp>
+		<pct>100</pct>
+		<fo>0</fo>
+	</policy_published>
+	<record>
+		<row>
+			<source_ip>94.16.31.117</source_ip>
+			<count>2</count>
+			<policy_evaluated>
+				<disposition>none</disposition>
+				<dkim>pass</dkim>
+				<spf>pass</spf>
+			</policy_evaluated>
+		</row>
+		<identifiers>
+			<envelope_from>vps4.lenders-it.nl</envelope_from>
+			<header_from>lenders-it.nl</header_from>
+		</identifiers>
+		<auth_results>
+			<dkim>
+				<domain>lenders-it.nl</domain>
+				<result>pass</result>
+				<selector>202604</selector>
+			</dkim>
+			<spf>
+				<domain>vps4.lenders-it.nl</domain>
+				<result>pass</result>
+			</spf>
+		</auth_results>
+	</record>
+</feedback>
+XML;
+
+        $report = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => '674394fd-26f3-4172-9a8d-6e4e52687cf7',
+            'org_name' => 'AMAZON-SES',
+            'email' => 'postmaster@amazonses.com',
+            'report_begin_at' => now()->subDays(2),
+            'report_end_at' => now()->subDay(),
+            'policy_domain' => 'lenders-it.nl',
+            'raw_xml' => $rawXml,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('reports.show', $report))
+            ->assertOk()
+            ->assertSee('Published policy')
+            ->assertSee('DKIM alignment')
+            ->assertSee('SPF alignment')
+            ->assertSeeInOrder(['Policy', 'reject'])
+            ->assertSeeInOrder(['Subdomain policy', 'reject'])
+            ->assertSee('Percentage')
+            ->assertSee('Failure options');
     }
 
     public function test_report_detail_page_shows_parsed_dkim_and_spf_domains_per_record(): void
@@ -663,49 +748,190 @@ class DashboardTest extends TestCase
             ->assertDontSee('Other Day Sender');
     }
 
-    public function test_dashboard_shows_recent_alert_events(): void
+    public function test_dashboard_shows_quick_links_to_dedicated_pages(): void
     {
         $user = User::factory()->create();
-        $otherUser = User::factory()->create();
-
-        $rule = DmarcAlertRule::query()->create([
-            'user_id' => $user->id,
-            'name' => 'SPF spike on mail.example.com',
-            'domain' => 'mail.example.com',
-        ]);
-
-        $rule->events()->create([
-            'triggered_at' => now(),
-            'current_total_messages' => 100,
-            'current_spf_fail_messages' => 40,
-            'current_fail_rate' => 40.0,
-            'baseline_total_messages' => 100,
-            'baseline_spf_fail_messages' => 5,
-            'baseline_fail_rate' => 5.0,
-        ]);
-
-        $otherRule = DmarcAlertRule::query()->create([
-            'user_id' => $otherUser->id,
-            'name' => 'Other tenant alert rule',
-            'domain' => 'other-tenant.example',
-        ]);
-
-        $otherRule->events()->create([
-            'triggered_at' => now(),
-            'current_total_messages' => 50,
-            'current_spf_fail_messages' => 30,
-            'current_fail_rate' => 60.0,
-            'baseline_total_messages' => 50,
-            'baseline_spf_fail_messages' => 2,
-            'baseline_fail_rate' => 4.0,
-        ]);
 
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Recent alert events')
-            ->assertSee('SPF spike on mail.example.com')
-            ->assertDontSee('Other tenant alert rule');
+            ->assertSee('Browse all reports')
+            ->assertSee('Manage IMAP accounts')
+            ->assertSee('Manage alerts')
+            ->assertDontSee('Recent DMARC reports')
+            ->assertDontSee('Account health')
+            ->assertDontSee('Recent alert events');
+    }
+
+    public function test_dashboard_groups_secondary_sections_into_tabs(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSeeInOrder(['Overview', 'Failures & triage', 'Infrastructure & DNS', 'Records per domain'])
+            ->assertDontSee('Failure drill-down')
+            ->assertDontSee('DNS record health');
+
+        $this->actingAs($user)
+            ->get(route('dashboard', ['tab' => 'triage']))
+            ->assertOk()
+            ->assertSee('Failure drill-down')
+            ->assertDontSee('Records per domain')
+            ->assertDontSee('DNS record health');
+
+        $this->actingAs($user)
+            ->get(route('dashboard', ['tab' => 'dns']))
+            ->assertOk()
+            ->assertSee('DNS record health')
+            ->assertDontSee('Records per domain')
+            ->assertDontSee('Failure drill-down');
+    }
+
+    public function test_dashboard_ignores_unknown_tab_values(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('dashboard', ['tab' => 'not-a-real-tab']))
+            ->assertOk()
+            ->assertSee('Records per domain');
+    }
+
+    public function test_dashboard_focus_filter_links_preserve_the_triage_tab(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('dashboard', ['tab' => 'triage']))
+            ->assertOk()
+            ->assertSee(route('dashboard', ['range' => '30d', 'focus' => 'dkim_fail', 'tab' => 'triage']));
+    }
+
+    public function test_dashboard_shows_likely_unauthorized_senders(): void
+    {
+        $user = User::factory()->create();
+
+        $account = ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $report = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'triage-spoof-report',
+            'org_name' => 'Triage Sender',
+            'email' => 'triage@example.com',
+            'report_begin_at' => now()->subDays(2),
+            'report_end_at' => now()->subDay(),
+            'policy_domain' => 'triage.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $report->id,
+            'source_ip' => '198.51.100.77',
+            'message_count' => 9,
+            'disposition' => 'reject',
+            'dkim' => 'fail',
+            'spf' => 'fail',
+            'header_from' => 'triage.example',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $report->id,
+            'source_ip' => '198.51.100.77',
+            'message_count' => 3,
+            'disposition' => 'reject',
+            'dkim' => 'fail',
+            'spf' => 'fail',
+            'header_from' => 'triage.example',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $report->id,
+            'source_ip' => '203.0.113.44',
+            'message_count' => 50,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'triage.example',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard', ['tab' => 'triage']))
+            ->assertOk()
+            ->assertSee('Likely unauthorized senders')
+            ->assertSee('198.51.100.77')
+            ->assertSee('12 msgs');
+    }
+
+    public function test_dashboard_shows_possible_missing_spf_entries(): void
+    {
+        $user = User::factory()->create();
+
+        $account = ImapAccount::query()->create([
+            'user_id' => $user->id,
+            'name' => 'Primary Inbox',
+            'host' => 'imap.example.com',
+            'port' => 993,
+            'encryption' => 'ssl',
+            'username' => 'reports@example.com',
+            'password' => 'secret',
+            'folder' => 'INBOX',
+            'search_criteria' => 'UNSEEN',
+            'is_active' => true,
+        ]);
+
+        $report = DmarcReport::query()->create([
+            'imap_account_id' => $account->id,
+            'external_report_id' => 'triage-missing-spf-report',
+            'org_name' => 'Triage Sender',
+            'email' => 'triage@example.com',
+            'report_begin_at' => now()->subDays(2),
+            'report_end_at' => now()->subDay(),
+            'policy_domain' => 'triage.example',
+            'raw_xml' => '<feedback />',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $report->id,
+            'source_ip' => '192.0.2.55',
+            'message_count' => 7,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'dkim_domain' => 'mailer.triage.example',
+            'spf' => 'fail',
+            'spf_domain' => 'bounce.triage.example',
+            'header_from' => 'triage.example',
+        ]);
+
+        DmarcRecord::query()->create([
+            'dmarc_report_id' => $report->id,
+            'source_ip' => '192.0.2.60',
+            'message_count' => 40,
+            'disposition' => 'none',
+            'dkim' => 'pass',
+            'spf' => 'pass',
+            'header_from' => 'triage.example',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard', ['tab' => 'triage']))
+            ->assertOk()
+            ->assertSee('Possible missing SPF entries')
+            ->assertSee('mailer.triage.example')
+            ->assertSee('192.0.2.55')
+            ->assertSee('bounce.triage.example');
     }
 
     public function test_dashboard_shows_dns_record_health(): void
@@ -759,13 +985,61 @@ class DashboardTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->get(route('dashboard'))
+            ->get(route('dashboard', ['tab' => 'dns']))
             ->assertOk()
             ->assertSee('DNS record health')
             ->assertSee('own-domain.example')
             ->assertSee('not found')
             ->assertSee('error')
             ->assertDontSee('other-tenant-only.example');
+    }
+
+    public function test_dashboard_shows_parsed_policy_details_for_found_dns_records(): void
+    {
+        $user = User::factory()->create();
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $user->id,
+            'record_type' => 'dmarc',
+            'domain' => 'parsed-domain.example',
+            'host' => '_dmarc.parsed-domain.example',
+            'selector' => null,
+            'records' => ['v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@parsed-domain.example'],
+            'status' => 'found',
+            'fetched_at' => now(),
+        ]);
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $user->id,
+            'record_type' => 'spf',
+            'domain' => 'parsed-domain.example',
+            'host' => 'parsed-domain.example',
+            'selector' => null,
+            'records' => ['v=spf1 include:_spf.parsed-domain.example -all'],
+            'status' => 'found',
+            'fetched_at' => now(),
+        ]);
+
+        DmarcDnsRecordSnapshot::query()->create([
+            'user_id' => $user->id,
+            'record_type' => 'dkim',
+            'domain' => 'mail.parsed-domain.example',
+            'host' => 's1._domainkey.mail.parsed-domain.example',
+            'selector' => 's1',
+            'records' => ['v=DKIM1; k=rsa; p=ABC123'],
+            'status' => 'found',
+            'fetched_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard', ['tab' => 'dns']))
+            ->assertOk()
+            ->assertSee('Policy details')
+            ->assertSee('Aggregate report URI')
+            ->assertSee('mailto:dmarc@parsed-domain.example')
+            ->assertSee('include:_spf.parsed-domain.example')
+            ->assertSee('Key type')
+            ->assertSee('rsa');
     }
 
     public function test_dashboard_shows_trend_and_disposition_chart_containers(): void

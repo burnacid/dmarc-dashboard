@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Domain;
 use App\Models\DmarcDnsRecordSnapshot;
 use App\Models\DmarcReport;
+use App\Models\Domain;
 use App\Models\ImapAccount;
 use App\Models\User;
+use App\Services\Dmarc\DmarcXmlParser;
+use App\Services\Dns\DnsPolicyRecordParser;
 use App\Support\AccessScope;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -112,7 +114,7 @@ class DmarcReportController extends Controller
         ]);
     }
 
-    public function show(DmarcReport $dmarcReport): View
+    public function show(DmarcReport $dmarcReport, DmarcXmlParser $xmlParser, DnsPolicyRecordParser $policyRecordParser): View
     {
         abort_unless(
             AccessScope::sharedMode() || $dmarcReport->account()->value('user_id') === auth()->id(),
@@ -121,10 +123,16 @@ class DmarcReportController extends Controller
 
         $dmarcReport->load(['account:id,name,user_id', 'records']);
 
+        $policyPublished = $policyRecordParser->describe(
+            'dmarc',
+            $xmlParser->parsePolicyPublished($dmarcReport->raw_xml)
+        );
+
         return view('dmarc-reports.show', [
             'report' => $dmarcReport,
             'formattedXml' => $this->formatXml($dmarcReport->raw_xml),
             'dnsSnapshotContext' => $this->buildDnsSnapshotContext($dmarcReport, auth()->user()),
+            'policyPublished' => $policyPublished,
         ]);
     }
 

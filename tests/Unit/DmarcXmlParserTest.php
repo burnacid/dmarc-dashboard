@@ -79,5 +79,45 @@ XML;
         $this->assertSame(sha1($xml), $parsed['external_report_id']);
         $this->assertSame([], $parsed['records']);
     }
-}
 
+    public function test_it_parses_the_policy_published_block_excluding_the_domain_tag(): void
+    {
+        $xml = <<<'XML'
+<?xml version="1.0"?>
+<feedback>
+    <policy_published>
+        <domain>lenders-it.nl</domain>
+        <adkim>r</adkim>
+        <aspf>r</aspf>
+        <p>reject</p>
+        <sp>reject</sp>
+        <pct>100</pct>
+        <fo>0</fo>
+    </policy_published>
+</feedback>
+XML;
+
+        $tags = app(DmarcXmlParser::class)->parsePolicyPublished($xml);
+
+        $this->assertSame([
+            'adkim' => 'r',
+            'aspf' => 'r',
+            'p' => 'reject',
+            'sp' => 'reject',
+            'pct' => '100',
+            'fo' => '0',
+        ], $tags);
+    }
+
+    public function test_it_returns_an_empty_array_when_policy_published_is_missing(): void
+    {
+        $xml = '<feedback><report_metadata><org_name>Receiver</org_name></report_metadata></feedback>';
+
+        $this->assertSame([], app(DmarcXmlParser::class)->parsePolicyPublished($xml));
+    }
+
+    public function test_it_returns_an_empty_array_for_unparseable_xml(): void
+    {
+        $this->assertSame([], app(DmarcXmlParser::class)->parsePolicyPublished('not xml'));
+    }
+}

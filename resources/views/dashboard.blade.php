@@ -50,6 +50,18 @@
             </div>
         </section>
 
+        <section class="flex flex-wrap gap-3">
+            <a href="{{ route('reports.index', $rangeQuery) }}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10">
+                Browse all reports →
+            </a>
+            <a href="{{ route('imap-accounts.index') }}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10">
+                Manage IMAP accounts →
+            </a>
+            <a href="{{ route('alerts.index') }}" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10">
+                Manage alerts →
+            </a>
+        </section>
+
         <section x-data="{ showCustomTime: {{ $range['is_custom'] ? 'true' : 'false' }} }" class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -61,7 +73,7 @@
                     @foreach ($rangeOptions as $value => $label)
                         @continue($value === 'custom')
                         <a
-                            href="{{ route('dashboard', array_filter(['range' => $value, 'focus' => $focus, 'domain' => $selectedDomain])) }}"
+                            href="{{ route('dashboard', array_filter(['range' => $value, 'focus' => $focus, 'domain' => $selectedDomain, 'tab' => $activeTab])) }}"
                             class="rounded-2xl px-3 py-2 text-sm font-medium transition {{ $range['value'] === $value ? 'bg-sky-400 text-slate-950' : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' }}"
                         >
                             {{ $label }}
@@ -82,6 +94,7 @@
             <form x-cloak x-show="showCustomTime" x-transition method="GET" action="{{ route('dashboard') }}" class="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:grid-cols-[1fr,1fr,auto] md:items-end">
                     <input type="hidden" name="focus" value="{{ $focus }}">
                     <input type="hidden" name="range" value="custom">
+                    <input type="hidden" name="tab" value="{{ $activeTab }}">
                     @if ($selectedDomain !== '')
                         <input type="hidden" name="domain" value="{{ $selectedDomain }}">
                     @endif
@@ -130,217 +143,128 @@
             </div>
         </section>
 
-        <section class="grid gap-6 xl:grid-cols-2">
-            <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
-                <div class="flex items-center justify-between gap-4">
-                    <div>
-                        <h2 class="text-lg font-semibold text-white">Records per domain</h2>
-                        <p class="mt-1 text-sm text-slate-400">Volume grouped by `header_from` with report domain fallback.</p>
-                    </div>
-                </div>
+        <section>
+            <div class="flex flex-wrap gap-2 border-b border-white/10 pb-3">
+                @foreach ([
+                    'overview' => 'Overview',
+                    'triage' => 'Failures & triage',
+                    'dns' => 'Infrastructure & DNS',
+                ] as $tabValue => $tabLabel)
+                    <a
+                        href="{{ route('dashboard', array_merge($rangeQuery, ['focus' => $focus, 'tab' => $tabValue])) }}"
+                        aria-current="{{ $activeTab === $tabValue ? 'page' : 'false' }}"
+                        class="rounded-2xl px-4 py-2 text-sm font-medium transition {{ $activeTab === $tabValue ? 'bg-sky-400 text-slate-950' : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' }}"
+                    >
+                        {{ $tabLabel }}
+                    </a>
+                @endforeach
+            </div>
 
-                @php
-                    $domainMax = max(1, (int) ($domainVolumes->max('total_messages') ?? 1));
-                @endphp
+            @if ($activeTab === 'overview')
+            <div class="mt-6 flex flex-col gap-6">
+                <div class="grid gap-6 xl:grid-cols-2">
+                    <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+                        <div class="flex items-center justify-between gap-4">
+                            <div>
+                                <h2 class="text-lg font-semibold text-white">Records per domain</h2>
+                                <p class="mt-1 text-sm text-slate-400">Volume grouped by `header_from` with report domain fallback.</p>
+                            </div>
+                        </div>
 
-                <div class="mt-5 space-y-4">
-                    @forelse ($domainVolumes as $domain)
                         @php
-                            $percentage = min(100, (int) round(($domain->total_messages / $domainMax) * 100));
-                            $domainReportsLink = route('reports.index', array_merge($rangeQuery, ['domain' => $domain->domain]));
+                            $domainMax = max(1, (int) ($domainVolumes->max('total_messages') ?? 1));
                         @endphp
-                        <a
-                            href="{{ $domainReportsLink }}"
-                            title="View reports for {{ $domain->domain }}"
-                            aria-label="View reports for {{ $domain->domain }}"
-                            class="block rounded-2xl px-2 py-2 transition hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-                        >
-                            <div class="mb-2 flex items-center justify-between gap-4 text-sm">
-                                <p class="font-medium text-white">{{ $domain->domain }}</p>
-                                <p class="text-slate-300">{{ number_format((int) $domain->total_messages) }} msgs</p>
-                            </div>
-                            <div class="h-2.5 rounded-full bg-white/10">
-                                <div class="h-2.5 rounded-full bg-sky-400" style="width: {{ $percentage }}%"></div>
-                            </div>
-                        </a>
-                    @empty
-                        <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-                            No domain data yet.
-                        </div>
-                    @endforelse
-                </div>
 
-                <p class="mt-4 text-xs text-slate-500">Click a domain row to open matching reports.</p>
-            </div>
-
-            <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
-                <h2 class="text-lg font-semibold text-white">Authentication results</h2>
-                <p class="mt-1 text-sm text-slate-400">DKIM/SPF pass-fail totals and policy disposition outcomes for the selected range.</p>
-
-                @php
-                    $dkimPass = (int) ($resultSummary->dkim_pass ?? 0);
-                    $dkimFail = (int) ($resultSummary->dkim_fail ?? 0);
-                    $spfPass = (int) ($resultSummary->spf_pass ?? 0);
-                    $spfFail = (int) ($resultSummary->spf_fail ?? 0);
-                    $dispositionNone = (int) ($resultSummary->disposition_none ?? 0);
-                    $dispositionQuarantine = (int) ($resultSummary->disposition_quarantine ?? 0);
-                    $dispositionReject = (int) ($resultSummary->disposition_reject ?? 0);
-                    $dispositionOther = (int) ($resultSummary->disposition_other ?? 0);
-                    $authMax = max(1, $dkimPass, $dkimFail, $spfPass, $spfFail);
-                @endphp
-
-                <div class="mt-5 space-y-4">
-                    @foreach ([
-                        ['label' => 'DKIM pass', 'value' => $dkimPass, 'bar' => 'bg-emerald-400'],
-                        ['label' => 'DKIM fail', 'value' => $dkimFail, 'bar' => 'bg-rose-400'],
-                        ['label' => 'SPF pass', 'value' => $spfPass, 'bar' => 'bg-emerald-400'],
-                        ['label' => 'SPF fail', 'value' => $spfFail, 'bar' => 'bg-rose-400'],
-                    ] as $line)
-                        @php $percent = min(100, (int) round(($line['value'] / $authMax) * 100)); @endphp
-                        <div>
-                            <div class="mb-2 flex items-center justify-between text-sm">
-                                <p class="text-slate-200">{{ $line['label'] }}</p>
-                                <p class="text-slate-300">{{ number_format($line['value']) }}</p>
-                            </div>
-                            <div class="h-2.5 rounded-full bg-white/10">
-                                <div class="h-2.5 rounded-full {{ $line['bar'] }}" style="width: {{ $percent }}%"></div>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-
-                @php
-                    $dispositionChartData = [
-                        'none' => $dispositionNone,
-                        'quarantine' => $dispositionQuarantine,
-                        'reject' => $dispositionReject,
-                        'other' => $dispositionOther,
-                    ];
-                @endphp
-                <script type="application/json" id="dashboard-disposition-data">{!! json_encode($dispositionChartData) !!}</script>
-
-                <div class="mt-6 border-t border-white/10 pt-5">
-                    <p class="text-sm font-medium text-slate-200">Policy disposition split</p>
-                    <div class="mt-3 flex items-center gap-6">
-                        <div class="h-32 w-32 shrink-0">
-                            <canvas id="disposition-chart"></canvas>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
-                            <p>None: {{ number_format($dispositionNone) }}</p>
-                            <p>Quarantine: {{ number_format($dispositionQuarantine) }}</p>
-                            <p>Reject: {{ number_format($dispositionReject) }}</p>
-                            <p>Other: {{ number_format($dispositionOther) }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
-                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                        <h2 class="text-lg font-semibold text-white">Failure drill-down</h2>
-                        <p class="mt-1 text-sm text-slate-400">Zoom into failed traffic, inspect what failed, and open the original report XML.</p>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        @foreach ($focusOptions as $value => $label)
-                            <a
-                                href="{{ route('dashboard', array_merge($rangeQuery, ['focus' => $value])) }}"
-                                class="rounded-2xl px-3 py-2 text-sm font-medium transition {{ $focus === $value ? 'bg-rose-400 text-white' : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' }}"
-                            >
-                                {{ $label }}
-                            </a>
-                        @endforeach
-                    </div>
-                </div>
-
-                <div class="mt-5 grid gap-3 md:grid-cols-5">
-                    @foreach ($focusOptions as $value => $label)
-                        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-                            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ $label }}</p>
-                            <p class="mt-2 text-2xl font-semibold text-white">{{ number_format((int) ($failureSummary[$value] ?? 0)) }}</p>
-                        </div>
-                    @endforeach
-                </div>
-
-                <div class="mt-6 overflow-hidden rounded-2xl border border-white/10">
-                    <table class="min-w-full divide-y divide-white/10 text-sm">
-                        <thead class="bg-white/5 text-left text-slate-400">
-                            <tr>
-                                <th class="px-4 py-3 font-medium">Domain / source</th>
-                                <th class="px-4 py-3 font-medium">What failed</th>
-                                <th class="px-4 py-3 font-medium">Messages</th>
-                                <th class="px-4 py-3 font-medium">Reported</th>
-                                <th class="px-4 py-3 font-medium">Report</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-white/10 bg-slate-950/30 text-slate-200">
-                            @forelse ($focusedFailures as $row)
-                                <tr>
-                                    <td class="px-4 py-3 align-top">
-                                        <p class="font-medium text-white">{{ $row->domain }}</p>
-                                        <p class="mt-1 text-xs text-slate-400">{{ $row->source_ip }} · {{ $row->account_name }}</p>
-                                        @if ($row->org_name)
-                                            <p class="mt-1 text-xs text-slate-500">{{ $row->org_name }}</p>
-                                        @endif
-                                    </td>
-                                    <td class="px-4 py-3 align-top">
-                                        <div class="flex flex-wrap gap-2">
-                                            @if (strtolower((string) $row->dkim) === 'fail')
-                                                <span class="rounded-full bg-rose-400/15 px-2.5 py-1 text-xs font-semibold text-rose-200">DKIM fail</span>
-                                            @endif
-                                            @if (strtolower((string) $row->spf) === 'fail')
-                                                <span class="rounded-full bg-amber-400/15 px-2.5 py-1 text-xs font-semibold text-amber-200">SPF fail</span>
-                                            @endif
-                                            @if (in_array(strtolower((string) $row->disposition), ['quarantine', 'reject'], true))
-                                                <span class="rounded-full bg-sky-400/15 px-2.5 py-1 text-xs font-semibold text-sky-200">Disposition {{ strtolower((string) $row->disposition) }}</span>
-                                            @endif
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3 align-top">{{ number_format($row->message_count) }}</td>
-                                    <td class="px-4 py-3 align-top">{{ $row->reported_at->format('Y-m-d H:i') }}</td>
-                                    <td class="px-4 py-3 align-top">
-                                        <a href="{{ route('reports.show', $row->report_id) }}" class="text-sm font-medium text-sky-300 hover:text-sky-200">View original report</a>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5" class="px-4 py-8 text-center text-slate-400">No failed records in this range for the current filter.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="flex flex-col gap-6">
-                <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
-                    <div class="flex items-center justify-between gap-4">
-                        <div>
-                            <h2 class="text-lg font-semibold text-white">Recent DMARC reports</h2>
-                            <p class="mt-1 text-sm text-slate-400">Latest parsed reports inside the selected timeframe.</p>
-                        </div>
-                        <a href="{{ route('reports.index', $rangeQuery) }}" class="text-sm font-medium text-sky-300 hover:text-sky-200">Browse all reports</a>
-                    </div>
-
-                    <div class="mt-5 space-y-3">
-                        @forelse ($recentReports as $report)
-                            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p class="font-medium text-white">{{ $report->org_name ?? 'Unknown sender' }}</p>
-                                        <p class="mt-1 text-sm text-slate-400">{{ $report->policy_domain ?? '—' }} · {{ $report->account?->name ?? '—' }}</p>
+                        <div class="mt-5 space-y-4">
+                            @forelse ($domainVolumes as $domain)
+                                @php
+                                    $percentage = min(100, (int) round(($domain->total_messages / $domainMax) * 100));
+                                    $domainReportsLink = route('reports.index', array_merge($rangeQuery, ['domain' => $domain->domain]));
+                                @endphp
+                                <a
+                                    href="{{ $domainReportsLink }}"
+                                    title="View reports for {{ $domain->domain }}"
+                                    aria-label="View reports for {{ $domain->domain }}"
+                                    class="block rounded-2xl px-2 py-2 transition hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                                >
+                                    <div class="mb-2 flex items-center justify-between gap-4 text-sm">
+                                        <p class="font-medium text-white">{{ $domain->domain }}</p>
+                                        <p class="text-slate-300">{{ number_format((int) $domain->total_messages) }} msgs</p>
                                     </div>
-                                    <a href="{{ route('reports.show', $report) }}" class="text-sm font-medium text-sky-300 hover:text-sky-200">Open</a>
+                                    <div class="h-2.5 rounded-full bg-white/10">
+                                        <div class="h-2.5 rounded-full bg-sky-400" style="width: {{ $percentage }}%"></div>
+                                    </div>
+                                </a>
+                            @empty
+                                <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
+                                    No domain data yet.
                                 </div>
-                                <p class="mt-3 text-xs text-slate-500">{{ optional($report->report_end_at)->format('Y-m-d H:i') ?? '—' }}</p>
+                            @endforelse
+                        </div>
+
+                        <p class="mt-4 text-xs text-slate-500">Click a domain row to open matching reports.</p>
+                    </div>
+
+                    <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+                        <h2 class="text-lg font-semibold text-white">Authentication results</h2>
+                        <p class="mt-1 text-sm text-slate-400">DKIM/SPF pass-fail totals and policy disposition outcomes for the selected range.</p>
+
+                        @php
+                            $dkimPass = (int) ($resultSummary->dkim_pass ?? 0);
+                            $dkimFail = (int) ($resultSummary->dkim_fail ?? 0);
+                            $spfPass = (int) ($resultSummary->spf_pass ?? 0);
+                            $spfFail = (int) ($resultSummary->spf_fail ?? 0);
+                            $dispositionNone = (int) ($resultSummary->disposition_none ?? 0);
+                            $dispositionQuarantine = (int) ($resultSummary->disposition_quarantine ?? 0);
+                            $dispositionReject = (int) ($resultSummary->disposition_reject ?? 0);
+                            $dispositionOther = (int) ($resultSummary->disposition_other ?? 0);
+                            $authMax = max(1, $dkimPass, $dkimFail, $spfPass, $spfFail);
+                        @endphp
+
+                        <div class="mt-5 space-y-4">
+                            @foreach ([
+                                ['label' => 'DKIM pass', 'value' => $dkimPass, 'bar' => 'bg-emerald-400'],
+                                ['label' => 'DKIM fail', 'value' => $dkimFail, 'bar' => 'bg-rose-400'],
+                                ['label' => 'SPF pass', 'value' => $spfPass, 'bar' => 'bg-emerald-400'],
+                                ['label' => 'SPF fail', 'value' => $spfFail, 'bar' => 'bg-rose-400'],
+                            ] as $line)
+                                @php $percent = min(100, (int) round(($line['value'] / $authMax) * 100)); @endphp
+                                <div>
+                                    <div class="mb-2 flex items-center justify-between text-sm">
+                                        <p class="text-slate-200">{{ $line['label'] }}</p>
+                                        <p class="text-slate-300">{{ number_format($line['value']) }}</p>
+                                    </div>
+                                    <div class="h-2.5 rounded-full bg-white/10">
+                                        <div class="h-2.5 rounded-full {{ $line['bar'] }}" style="width: {{ $percent }}%"></div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        @php
+                            $dispositionChartData = [
+                                'none' => $dispositionNone,
+                                'quarantine' => $dispositionQuarantine,
+                                'reject' => $dispositionReject,
+                                'other' => $dispositionOther,
+                            ];
+                        @endphp
+                        <script type="application/json" id="dashboard-disposition-data">{!! json_encode($dispositionChartData) !!}</script>
+
+                        <div class="mt-6 border-t border-white/10 pt-5">
+                            <p class="text-sm font-medium text-slate-200">Policy disposition split</p>
+                            <div class="mt-3 flex items-center gap-6">
+                                <div class="h-32 w-32 shrink-0">
+                                    <canvas id="disposition-chart"></canvas>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
+                                    <p>None: {{ number_format($dispositionNone) }}</p>
+                                    <p>Quarantine: {{ number_format($dispositionQuarantine) }}</p>
+                                    <p>Reject: {{ number_format($dispositionReject) }}</p>
+                                    <p>Other: {{ number_format($dispositionOther) }}</p>
+                                </div>
                             </div>
-                        @empty
-                            <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-                                No DMARC reports imported yet for this range.
-                            </div>
-                        @endforelse
+                        </div>
                     </div>
                 </div>
 
@@ -348,13 +272,11 @@
                     <h2 class="text-lg font-semibold text-white">Noisiest source IPs</h2>
                     <p class="mt-1 text-sm text-slate-400">Top message counts aggregated from imported DMARC records.</p>
 
-                    <div class="mt-5 space-y-3">
+                    <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         @forelse ($topSources as $source)
                             <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-                                <div class="flex items-center justify-between gap-4">
-                                    <p class="font-medium text-white">{{ $source->source_ip }}</p>
-                                    <span class="rounded-full bg-sky-400/15 px-3 py-1 text-xs font-semibold text-sky-200">{{ number_format($source->total_messages) }} msgs</span>
-                                </div>
+                                <p class="break-all font-medium text-white">{{ $source->source_ip }}</p>
+                                <span class="mt-2 inline-block rounded-full bg-sky-400/15 px-3 py-1 text-xs font-semibold text-sky-200">{{ number_format($source->total_messages) }} msgs</span>
                             </div>
                         @empty
                             <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
@@ -363,115 +285,202 @@
                         @endforelse
                     </div>
                 </div>
-
-                <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
-                    <div class="flex items-center justify-between gap-4">
-                        <div>
-                            <h2 class="text-lg font-semibold text-white">Account health</h2>
-                            <p class="mt-1 text-sm text-slate-400">Quick status view for the inboxes you are polling.</p>
-                        </div>
-                        <a href="{{ route('imap-accounts.create') }}" class="text-sm font-medium text-sky-300 hover:text-sky-200">Add account</a>
-                    </div>
-
-                    <div class="mt-5 space-y-3">
-                        @forelse ($accounts as $account)
-                            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p class="font-medium text-white">{{ $account->name }}</p>
-                                        <p class="mt-1 text-sm text-slate-400">{{ $account->username }} · {{ $account->host }}:{{ $account->port }}</p>
-                                    </div>
-                                    <span class="rounded-full px-3 py-1 text-xs font-semibold {{ $account->is_active ? 'bg-emerald-400/15 text-emerald-200' : 'bg-slate-400/10 text-slate-300' }}">
-                                        {{ $account->is_active ? 'Active' : 'Paused' }}
-                                    </span>
-                                </div>
-                                <div class="mt-3 flex items-center justify-between text-sm text-slate-400">
-                                    <span>{{ $account->reports_count }} report(s)</span>
-                                    <span>{{ $account->last_polled_at?->diffForHumans() ?? 'Never polled' }}</span>
-                                </div>
-                            </div>
-                        @empty
-                            <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-                                No IMAP accounts configured yet.
-                            </div>
-                        @endforelse
-                    </div>
-                </div>
-
-                <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
-                    <div class="flex items-center justify-between gap-4">
-                        <div>
-                            <h2 class="text-lg font-semibold text-white">Recent alert events</h2>
-                            <p class="mt-1 text-sm text-slate-400">Latest triggered alert rules across all domains.</p>
-                        </div>
-                        <a href="{{ route('alerts.index') }}" class="text-sm font-medium text-sky-300 hover:text-sky-200">Manage alerts</a>
-                    </div>
-
-                    <div class="mt-5 space-y-3">
-                        @forelse ($recentAlertEvents as $event)
-                            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p class="font-medium text-white">{{ $event->rule->name ?? 'Alert rule' }}</p>
-                                        <p class="mt-1 text-xs text-slate-400">{{ $event->rule->domain ?? 'All domains' }} · {{ str_replace('_', ' ', $event->rule->metric ?? '') }}</p>
-                                    </div>
-                                    <span class="rounded-full bg-rose-400/15 px-3 py-1 text-xs font-semibold text-rose-200">{{ number_format($event->current_fail_rate, 1) }}%</span>
-                                </div>
-                                <p class="mt-2 text-xs text-slate-500">{{ $event->triggered_at->diffForHumans() }} · baseline {{ number_format($event->baseline_fail_rate, 1) }}%</p>
-                            </div>
-                        @empty
-                            <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-                                No alert events triggered yet.
-                            </div>
-                        @endforelse
-                    </div>
-                </div>
             </div>
-        </section>
+            @elseif ($activeTab === 'triage')
+            <div class="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+                <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">Failure drill-down</h2>
+                            <p class="mt-1 text-sm text-slate-400">Zoom into failed traffic, inspect what failed, and open the original report XML.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            @foreach ($focusOptions as $value => $label)
+                                <a
+                                    href="{{ route('dashboard', array_merge($rangeQuery, ['focus' => $value, 'tab' => 'triage'])) }}"
+                                    class="rounded-2xl px-3 py-2 text-sm font-medium transition {{ $focus === $value ? 'bg-rose-400 text-white' : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' }}"
+                                >
+                                    {{ $label }}
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
 
-        <section class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
-            <div class="flex items-center justify-between gap-4">
-                <div>
-                    <h2 class="text-lg font-semibold text-white">DNS record health</h2>
-                    <p class="mt-1 text-sm text-slate-400">Latest SPF, DMARC, and DKIM lookups across your monitored domains.</p>
+                    <div class="mt-5 grid gap-3 md:grid-cols-5">
+                        @foreach ($focusOptions as $value => $label)
+                            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ $label }}</p>
+                                <p class="mt-2 text-2xl font-semibold text-white">{{ number_format((int) ($failureSummary[$value] ?? 0)) }}</p>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    <div class="mt-6 overflow-hidden rounded-2xl border border-white/10">
+                        <table class="min-w-full divide-y divide-white/10 text-sm">
+                            <thead class="bg-white/5 text-left text-slate-400">
+                                <tr>
+                                    <th class="px-4 py-3 font-medium">Domain / source</th>
+                                    <th class="px-4 py-3 font-medium">What failed</th>
+                                    <th class="px-4 py-3 font-medium">Messages</th>
+                                    <th class="px-4 py-3 font-medium">Reported</th>
+                                    <th class="px-4 py-3 font-medium">Report</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/10 bg-slate-950/30 text-slate-200">
+                                @forelse ($focusedFailures as $row)
+                                    <tr>
+                                        <td class="px-4 py-3 align-top">
+                                            <p class="font-medium text-white">{{ $row->domain }}</p>
+                                            <p class="mt-1 text-xs text-slate-400">{{ $row->source_ip }} · {{ $row->account_name }}</p>
+                                            @if ($row->org_name)
+                                                <p class="mt-1 text-xs text-slate-500">{{ $row->org_name }}</p>
+                                            @endif
+                                        </td>
+                                        <td class="px-4 py-3 align-top">
+                                            <div class="flex flex-wrap gap-2">
+                                                @if (strtolower((string) $row->dkim) === 'fail')
+                                                    <span class="rounded-full bg-rose-400/15 px-2.5 py-1 text-xs font-semibold text-rose-200">DKIM fail</span>
+                                                @endif
+                                                @if (strtolower((string) $row->spf) === 'fail')
+                                                    <span class="rounded-full bg-amber-400/15 px-2.5 py-1 text-xs font-semibold text-amber-200">SPF fail</span>
+                                                @endif
+                                                @if (in_array(strtolower((string) $row->disposition), ['quarantine', 'reject'], true))
+                                                    <span class="rounded-full bg-sky-400/15 px-2.5 py-1 text-xs font-semibold text-sky-200">Disposition {{ strtolower((string) $row->disposition) }}</span>
+                                                @endif
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3 align-top">{{ number_format($row->message_count) }}</td>
+                                        <td class="px-4 py-3 align-top">{{ $row->reported_at->format('Y-m-d H:i') }}</td>
+                                        <td class="px-4 py-3 align-top">
+                                            <a href="{{ route('reports.show', $row->report_id) }}" class="text-sm font-medium text-sky-300 hover:text-sky-200">View original report</a>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="5" class="px-4 py-8 text-center text-slate-400">No failed records in this range for the current filter.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
 
-            <div class="mt-5 grid gap-4 xl:grid-cols-3">
-                @foreach (['spf' => 'SPF', 'dmarc' => 'DMARC', 'dkim' => 'DKIM'] as $type => $label)
-                    @php $rowsForType = $dnsHealth->where('record_type', $type); @endphp
-                    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-                        <h3 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300">{{ $label }}</h3>
-                        <div class="mt-3 space-y-3">
-                            @forelse ($rowsForType as $row)
-                                @php
-                                    $status = strtolower((string) $row->status);
-                                    $statusClasses = match ($status) {
-                                        'found' => 'bg-emerald-400/15 text-emerald-200',
-                                        'error' => 'bg-rose-400/15 text-rose-200',
-                                        'not_found' => 'bg-amber-400/15 text-amber-200',
-                                        default => 'bg-white/10 text-slate-200',
-                                    };
-                                @endphp
-                                <div class="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
-                                    <div class="flex items-center justify-between gap-3">
-                                        <p class="text-sm font-medium text-slate-100">{{ $row->domain }}</p>
-                                        <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses }}">{{ str_replace('_', ' ', $status) }}</span>
+                <div class="flex flex-col gap-6">
+                    <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+                        <h2 class="text-lg font-semibold text-white">Likely unauthorized senders</h2>
+                        <p class="mt-1 text-sm text-slate-400">Sources that fail both DKIM and SPF — neither mechanism vouches for them, which usually means spoofing rather than a misconfigured legitimate sender.</p>
+
+                        <div class="mt-5 space-y-3">
+                            @forelse ($senderTriage['unauthorized'] as $entry)
+                                <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                                    <div class="flex items-center justify-between gap-4">
+                                        <p class="font-medium text-white">{{ $entry->source_ip }}</p>
+                                        <span class="rounded-full bg-rose-400/15 px-3 py-1 text-xs font-semibold text-rose-200">{{ number_format($entry->total_messages) }} msgs</span>
                                     </div>
-                                    @if ($row->selector)
-                                        <p class="mt-1 text-xs text-slate-400">Selector: {{ $row->selector }}</p>
-                                    @endif
-                                    <p class="mt-2 text-[11px] text-slate-500">Checked {{ $row->fetched_at?->diffForHumans() ?? 'never' }}</p>
+                                    <p class="mt-2 text-xs text-slate-400">{{ $entry->domains->join(', ') }}</p>
+                                    <p class="mt-1 text-[11px] text-slate-500">Last seen {{ $entry->last_seen->diffForHumans() }}</p>
                                 </div>
                             @empty
-                                <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-3 text-sm text-slate-400">
-                                    No {{ $label }} records collected yet.
+                                <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
+                                    No sources failed both DKIM and SPF in this range.
                                 </div>
                             @endforelse
                         </div>
                     </div>
-                @endforeach
+
+                    <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+                        <h2 class="text-lg font-semibold text-white">Possible missing SPF entries</h2>
+                        <p class="mt-1 text-sm text-slate-400">DKIM passes (so the sender is legitimately signing) but SPF fails — usually means the sending IP just isn't declared in your SPF record yet.</p>
+
+                        <div class="mt-5 space-y-3">
+                            @forelse ($senderTriage['missingSpf'] as $entry)
+                                <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                                    <div class="flex items-center justify-between gap-4">
+                                        <p class="font-medium text-white">{{ $entry->dkim_domain ?? $entry->source_ips->first() }}</p>
+                                        <span class="rounded-full bg-amber-400/15 px-3 py-1 text-xs font-semibold text-amber-200">{{ number_format($entry->total_messages) }} msgs</span>
+                                    </div>
+                                    <p class="mt-2 text-xs text-slate-400">Sending from: {{ $entry->source_ips->join(', ') }}</p>
+                                    @if ($entry->spf_domain)
+                                        <p class="mt-1 text-xs text-slate-400">SPF checked against: {{ $entry->spf_domain }}</p>
+                                    @endif
+                                    <p class="mt-1 text-xs text-slate-500">Seen on: {{ $entry->domains->join(', ') }}</p>
+                                    <p class="mt-1 text-[11px] text-slate-500">Last seen {{ $entry->last_seen->diffForHumans() }}</p>
+                                </div>
+                            @empty
+                                <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-400">
+                                    No DKIM-passing senders are currently failing SPF in this range.
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
             </div>
+            @elseif ($activeTab === 'dns')
+            <div class="mt-6 rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">DNS record health</h2>
+                        <p class="mt-1 text-sm text-slate-400">Latest SPF, DMARC, and DKIM lookups across your monitored domains.</p>
+                    </div>
+                </div>
+
+                <div class="mt-5 grid gap-4 xl:grid-cols-3">
+                    @foreach (['spf' => 'SPF', 'dmarc' => 'DMARC', 'dkim' => 'DKIM'] as $type => $label)
+                        @php $rowsForType = $dnsHealth->where('record_type', $type); @endphp
+                        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                            <h3 class="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300">{{ $label }}</h3>
+                            <div class="mt-3 space-y-3">
+                                @forelse ($rowsForType as $row)
+                                    @php
+                                        $status = strtolower((string) $row->status);
+                                        $statusClasses = match ($status) {
+                                            'found' => 'bg-emerald-400/15 text-emerald-200',
+                                            'error' => 'bg-rose-400/15 text-rose-200',
+                                            'not_found' => 'bg-amber-400/15 text-amber-200',
+                                            default => 'bg-white/10 text-slate-200',
+                                        };
+                                    @endphp
+                                    <div class="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <p class="text-sm font-medium text-slate-100">{{ $row->domain }}</p>
+                                            <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses }}">{{ str_replace('_', ' ', $status) }}</span>
+                                        </div>
+                                        @if ($row->selector)
+                                            <p class="mt-1 text-xs text-slate-400">Selector: {{ $row->selector }}</p>
+                                        @endif
+                                        <p class="mt-2 text-[11px] text-slate-500">Checked {{ $row->fetched_at?->diffForHumans() ?? 'never' }}</p>
+
+                                        @if ($status === 'found' && $row->parsed_records->isNotEmpty())
+                                            <details class="mt-3 group">
+                                                <summary class="cursor-pointer text-xs font-medium text-sky-300 hover:text-sky-200">Policy details</summary>
+                                                <div class="mt-2 space-y-3">
+                                                    @foreach ($row->parsed_records as $parsedRecord)
+                                                        <dl class="space-y-1 rounded-xl border border-white/5 bg-black/20 p-2.5">
+                                                            @forelse ($parsedRecord['tags'] as $tag)
+                                                                <div class="flex items-start justify-between gap-3 text-xs">
+                                                                    <dt class="text-slate-400">{{ $tag['label'] }}</dt>
+                                                                    <dd class="break-all text-right text-slate-200">{{ $tag['value'] }}</dd>
+                                                                </div>
+                                                            @empty
+                                                                <p class="text-xs text-slate-500">{{ $parsedRecord['raw'] }}</p>
+                                                            @endforelse
+                                                        </dl>
+                                                    @endforeach
+                                                </div>
+                                            </details>
+                                        @endif
+                                    </div>
+                                @empty
+                                    <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 p-3 text-sm text-slate-400">
+                                        No {{ $label }} records collected yet.
+                                    </div>
+                                @endforelse
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+            @endif
         </section>
     </div>
 </x-app-layout>
