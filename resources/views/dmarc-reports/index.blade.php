@@ -123,16 +123,22 @@
                                     <div class="flex flex-col gap-2">
                                         <div class="flex flex-wrap gap-2 text-xs">
                                             @if ((int) ($report->dkim_fail_messages ?? 0) > 0)
-                                                <span class="rounded-full bg-rose-400/15 px-2.5 py-1 font-semibold text-rose-200">DKIM fail</span>
+                                                <span class="rounded-full bg-rose-400/15 px-2.5 py-1 font-semibold text-rose-200">DKIM Fail</span>
                                             @else
-                                                <span class="rounded-full bg-emerald-400/15 px-2.5 py-1 font-semibold text-emerald-200">DKIM pass</span>
+                                                <span class="rounded-full bg-emerald-400/15 px-2.5 py-1 font-semibold text-emerald-200">DKIM Pass</span>
+                                            @endif
+                                            @if ((int) ($report->dkim_misaligned_messages ?? 0) > 0)
+                                                <span class="rounded-full bg-amber-400/15 px-2.5 py-1 font-semibold text-amber-200">DKIM misaligned</span>
                                             @endif
                                         </div>
                                         <div class="flex flex-wrap gap-2 text-xs">
                                             @if ((int) ($report->spf_fail_messages ?? 0) > 0)
-                                                <span class="rounded-full bg-rose-400/15 px-2.5 py-1 font-semibold text-rose-200">SPF fail</span>
+                                                <span class="rounded-full bg-rose-400/15 px-2.5 py-1 font-semibold text-rose-200">SPF Fail</span>
                                             @else
-                                                <span class="rounded-full bg-emerald-400/15 px-2.5 py-1 font-semibold text-emerald-200">SPF pass</span>
+                                                <span class="rounded-full bg-emerald-400/15 px-2.5 py-1 font-semibold text-emerald-200">SPF Pass</span>
+                                            @endif
+                                            @if ((int) ($report->spf_misaligned_messages ?? 0) > 0)
+                                                <span class="rounded-full bg-amber-400/15 px-2.5 py-1 font-semibold text-amber-200">SPF misaligned</span>
                                             @endif
                                         </div>
                                     </div>

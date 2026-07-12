@@ -19,6 +19,8 @@ class DmarcReport extends Model
         'report_begin_at',
         'report_end_at',
         'policy_domain',
+        'aspf',
+        'adkim',
         'raw_xml',
     ];
 

@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Models\DmarcReport;
 use App\Models\ImapAccount;
 use App\Models\User;
+use App\Services\Dmarc\DmarcAlignmentEvaluator;
 use App\Services\Dmarc\DmarcAttachmentExtractor;
 use App\Services\Dmarc\DmarcIngestionService;
 use App\Services\Dmarc\DmarcXmlParser;
@@ -224,13 +225,14 @@ class DmarcIngestionServiceTest extends TestCase
 
     private function makeService(FakeImapClient $client): DmarcIngestionService
     {
-        return new class(app(DmarcAttachmentExtractor::class), app(DmarcXmlParser::class), $client) extends DmarcIngestionService {
+        return new class(app(DmarcAttachmentExtractor::class), app(DmarcXmlParser::class), app(DmarcAlignmentEvaluator::class), $client) extends DmarcIngestionService {
             public function __construct(
                 DmarcAttachmentExtractor $attachmentExtractor,
                 DmarcXmlParser $xmlParser,
+                DmarcAlignmentEvaluator $alignmentEvaluator,
                 private readonly FakeImapClient $client,
             ) {
-                parent::__construct($attachmentExtractor, $xmlParser);
+                parent::__construct($attachmentExtractor, $xmlParser, $alignmentEvaluator);
             }
 
             protected function createClient(ImapAccount $account): mixed

@@ -68,3 +68,10 @@ Schedule::command('logs:prune')
     ->onFailure($logScheduleFailure('schedule.logs.prune', 'logs:prune'))
     ->withoutOverlapping();
 
+Schedule::command('dmarc:collect-public-suffix-list')
+    ->name('schedule.dmarc.collect-public-suffix-list')
+    ->weeklyOn(1, '01:30')
+    ->onSuccess($logScheduleResult('schedule.dmarc.collect-public-suffix-list', 'dmarc:collect-public-suffix-list'))
+    ->onFailure($logScheduleFailure('schedule.dmarc.collect-public-suffix-list', 'dmarc:collect-public-suffix-list'))
+    ->withoutOverlapping();
+

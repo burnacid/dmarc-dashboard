@@ -18,10 +18,20 @@ class DmarcRecord extends Model
         'dkim',
         'dkim_domain',
         'dkim_selector',
+        'dkim_aligned',
         'spf',
         'spf_domain',
+        'spf_aligned',
         'header_from',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'spf_aligned' => 'boolean',
+            'dkim_aligned' => 'boolean',
+        ];
+    }
 
     public function report(): BelongsTo
     {

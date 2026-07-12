@@ -19,6 +19,7 @@ class DmarcIngestionService
     public function __construct(
         private readonly DmarcAttachmentExtractor $attachmentExtractor,
         private readonly DmarcXmlParser $xmlParser,
+        private readonly DmarcAlignmentEvaluator $alignmentEvaluator,
     ) {
     }
 
@@ -229,12 +230,29 @@ class DmarcIngestionService
                     'report_begin_at' => $parsed['report_begin_at'],
                     'report_end_at' => $parsed['report_end_at'],
                     'policy_domain' => $parsed['policy_domain'],
+                    'aspf' => $parsed['aspf'],
+                    'adkim' => $parsed['adkim'],
                     'raw_xml' => $xmlPayload,
                 ]
             );
 
+            $records = array_map(function (array $record) use ($parsed): array {
+                $record['spf_aligned'] = $this->alignmentEvaluator->isAligned(
+                    $record['header_from'],
+                    $record['spf_domain'],
+                    $parsed['aspf'],
+                );
+                $record['dkim_aligned'] = $this->alignmentEvaluator->isAligned(
+                    $record['header_from'],
+                    $record['dkim_domain'],
+                    $parsed['adkim'],
+                );
+
+                return $record;
+            }, $parsed['records']);
+
             $report->records()->delete();
-            $report->records()->createMany($parsed['records']);
+            $report->records()->createMany($records);
             $importedReports++;
         }
 

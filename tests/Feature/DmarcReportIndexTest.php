@@ -65,8 +65,8 @@ class DmarcReportIndexTest extends TestCase
         $response->assertOk()
             ->assertSee('Google')
             ->assertSee('example.com')
-            ->assertSee('DKIM pass')
-            ->assertSee('SPF pass')
+            ->assertSee('DKIM Pass')
+            ->assertSee('SPF Pass')
             ->assertDontSee('Microsoft')
             ->assertSee(route('reports.show', $matching), false);
     }

@@ -68,7 +68,7 @@ class DmarcReportController extends Controller
 
         $reports = AccessScope::ownedByViaRelation(DmarcReport::query(), $user, 'account')
             ->with('account:id,name,user_id')
-            ->with('records:id,dmarc_report_id,message_count,dkim,spf')
+            ->with('records:id,dmarc_report_id,message_count,dkim,spf,spf_aligned,dkim_aligned')
             ->withCount('records')
             ->withSum('records as total_messages', 'message_count')
             ->when($filters['account_id'], fn ($query, $accountId) => $query->where('imap_account_id', $accountId))
@@ -100,6 +100,12 @@ class DmarcReportController extends Controller
                 ->sum('message_count');
             $report->spf_fail_messages = $report->records
                 ->filter(fn ($record) => strtolower((string) $record->spf) === 'fail')
+                ->sum('message_count');
+            $report->dkim_misaligned_messages = $report->records
+                ->filter(fn ($record) => $record->dkim_aligned === false)
+                ->sum('message_count');
+            $report->spf_misaligned_messages = $report->records
+                ->filter(fn ($record) => $record->spf_aligned === false)
                 ->sum('message_count');
 
             return $report;
