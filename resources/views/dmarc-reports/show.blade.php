@@ -83,9 +83,12 @@
                                 </div>
                                 <div class="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
                                     <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500">DKIM result</p>
-                                    <div class="mt-2">
+                                    <div class="mt-2 flex flex-wrap gap-2">
                                         <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $dkim === 'pass' ? 'bg-emerald-400/15 text-emerald-200' : ($dkim === 'fail' ? 'bg-rose-400/15 text-rose-200' : 'bg-white/10 text-slate-200') }}">
-                                            {{ $record->dkim ?? '—' }}
+                                            {{ $record->dkim ? ucfirst($record->dkim) : '—' }}
+                                        </span>
+                                        <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $record->dkim_aligned === true ? 'bg-emerald-400/15 text-emerald-200' : ($record->dkim_aligned === false ? 'bg-rose-400/15 text-rose-200' : 'bg-white/10 text-slate-200') }}">
+                                            {{ $record->dkim_aligned === true ? 'Aligned' : ($record->dkim_aligned === false ? 'Not aligned' : 'Unknown') }}
                                         </span>
                                     </div>
                                     <p class="mt-1 text-xs text-slate-400">Domain: {{ $record->dkim_domain ?? '—' }}</p>
@@ -93,9 +96,12 @@
                                 </div>
                                 <div class="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
                                     <p class="text-[11px] uppercase tracking-[0.2em] text-slate-500">SPF result</p>
-                                    <div class="mt-2">
+                                    <div class="mt-2 flex flex-wrap gap-2">
                                         <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $spf === 'pass' ? 'bg-emerald-400/15 text-emerald-200' : ($spf === 'fail' ? 'bg-rose-400/15 text-rose-200' : 'bg-white/10 text-slate-200') }}">
-                                            {{ $record->spf ?? '—' }}
+                                            {{ $record->spf ? ucfirst($record->spf) : '—' }}
+                                        </span>
+                                        <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $record->spf_aligned === true ? 'bg-emerald-400/15 text-emerald-200' : ($record->spf_aligned === false ? 'bg-rose-400/15 text-rose-200' : 'bg-white/10 text-slate-200') }}">
+                                            {{ $record->spf_aligned === true ? 'Aligned' : ($record->spf_aligned === false ? 'Not aligned' : 'Unknown') }}
                                         </span>
                                     </div>
                                     <p class="mt-1 text-xs text-slate-400">Domain: {{ $record->spf_domain ?? '—' }}</p>

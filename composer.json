@@ -12,6 +12,7 @@
         "ext-simplexml": "*",
         "ext-zip": "*",
         "ext-zlib": "*",
+        "jeremykendall/php-domain-parser": "^6.4",
         "laragear/two-factor": "4.0",
         "laragear/webauthn": "5.0",
         "laravel/framework": "^13.0",

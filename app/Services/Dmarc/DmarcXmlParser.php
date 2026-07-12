@@ -16,6 +16,8 @@ class DmarcXmlParser
      *   report_begin_at:?Carbon,
      *   report_end_at:?Carbon,
      *   policy_domain:?string,
+     *   aspf:?string,
+     *   adkim:?string,
      *   records:array<int, array{source_ip:string,message_count:int,disposition:?string,dkim:?string,dkim_domain:?string,dkim_selector:?string,spf:?string,spf_domain:?string,header_from:?string}>
      * }
      */
@@ -59,6 +61,8 @@ class DmarcXmlParser
             'report_begin_at' => is_numeric($beginEpoch) ? Carbon::createFromTimestampUTC((int) $beginEpoch) : null,
             'report_end_at' => is_numeric($endEpoch) ? Carbon::createFromTimestampUTC((int) $endEpoch) : null,
             'policy_domain' => $this->readNode($root, 'policy_published/domain'),
+            'aspf' => $this->readNode($root, 'policy_published/aspf'),
+            'adkim' => $this->readNode($root, 'policy_published/adkim'),
             'records' => $records,
         ];
     }
