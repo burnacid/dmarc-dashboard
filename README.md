@@ -140,5 +140,3 @@ Planned next-step features:
 - Report detail pages and drill-down charts
 - OAuth-based mailbox authentication
 - Background queue-based mailbox polling
-
-
